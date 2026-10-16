@@ -1,0 +1,20 @@
+﻿workflows:
+  ionic-capacitor-ios:
+    name: Ionic Capacitor iOS App
+    max_build_duration: 60
+    instance_type: mac_mini_m1
+    environment:
+      node: 20
+      xcode: latest
+    scripts:
+      - name: Install npm dependencies
+        script: |
+          npm install --legacy-peer-deps
+      - name: Build web application
+        script: |
+          npm run build
+      - name: Capacitor sync ios
+        script: |
+          npx cap sync ios
+artifacts:
+  - '**/*.ipa'
