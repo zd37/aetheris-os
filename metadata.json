@@ -1,0 +1,6 @@
+{
+  "name": "Aetheris OS - Personal Management",
+  "description": "Minimal cyber personal management app for tuition, attendance, Salah, gym, to-do, and projects with Gemini AI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
