@@ -10,7 +10,6 @@ export const IOSStatusBar: React.FC<IOSStatusBarProps> = ({ title }) => {
     activeTab,
     setIsProfileModalOpen,
     setIsGeminiModalOpen,
-    setIsCalendarModalOpen,
     setIsNotesModalOpen,
     setIsBuyModalOpen,
     setGeminiInitialPrompt,
@@ -44,18 +43,6 @@ export const IOSStatusBar: React.FC<IOSStatusBarProps> = ({ title }) => {
             <h1 className="text-[22px] text-[#edf5ff] tracking-tight font-semibold">
               {title}
             </h1>
-
-            {/* In Tuition: glowing calendar pill */}
-            {activeTab === 'tuition' && (
-              <button
-                onClick={() => setIsCalendarModalOpen(true)}
-                className="ml-2 inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-[#0c1320] text-[#35d9ff] border border-[#35d9ff]/40 shadow-[0_0_12px_rgba(53,217,255,0.25)] hover:bg-[#162338] transition-all active:scale-95 text-xs font-mono font-medium"
-                aria-label="Open Overall Tuition Calendar"
-              >
-                <span className="material-symbols-outlined text-[16px]">calendar_month</span>
-                <span>Calendar</span>
-              </button>
-            )}
           </div>
 
           {/* Action Toolbar */}

@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   UserPreferences,
   Student,
@@ -14,6 +14,17 @@ import {
   ActiveTab,
   AppSection,
 } from '../types';
+import {
+  loadFromLocalStorageWithMigration,
+  loadInitialFullState,
+  persistFullState,
+  requestPersistentStorage,
+  localSet,
+  idbSet,
+  CANONICAL_STORAGE_KEY,
+  DEFAULT_GYM_PLAN,
+  DEFAULT_PREFERENCES,
+} from '../services/storageService';
 
 interface AppContextType {
   // Navigation & Screen
@@ -25,6 +36,7 @@ interface AppContextType {
   setIsGeminiModalOpen: (open: boolean) => void;
   geminiInitialPrompt: string;
   setGeminiInitialPrompt: (prompt: string) => void;
+  isStorageReady: boolean;
 
   // Onboarding & Preferences
   preferences: UserPreferences;
@@ -114,21 +126,6 @@ export function getLocalDateString(d: Date = new Date()): string {
   return `${year}-${month}-${day}`;
 }
 
-const STORAGE_KEY = 'aetheris_os_state_v2';
-
-const DEFAULT_GYM_PLAN: GymWorkoutPlan = {
-  id: 'plan-push',
-  title: "Upper Body Push (45m)",
-  focus: 'Chest, Shoulders & Triceps',
-  restTimerSeconds: 90,
-  exercises: [
-    { id: 'ex-1', name: 'Incline Dumbbell Press', sets: 4, reps: '8–10 reps', weight: '30 kg', completed: false },
-    { id: 'ex-2', name: 'Overhead Shoulder Press', sets: 3, reps: '8 reps', weight: '45 kg', completed: false },
-    { id: 'ex-3', name: 'Chest Dips', sets: 3, reps: '10 reps', weight: 'Bodyweight', completed: false },
-    { id: 'ex-4', name: 'Lateral Cable Raises', sets: 4, reps: '15 reps', weight: 'Dumbbells', completed: false },
-  ],
-};
-
 export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Navigation
   const [activeTab, setActiveTab] = useState<ActiveTab>('home');
@@ -140,178 +137,218 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
 
-  // Core Data States - Defaults are empty unless saved in localStorage
+  // Storage hydration readiness flag: Prevents empty state overwrite before storage is ready
+  const [isStorageReady, setIsStorageReady] = useState(false);
+
+  // Read initial fast state from localStorage with legacy migration
+  const initialLocal = loadFromLocalStorageWithMigration();
+
+  // Core Data States
   const [preferences, setPreferences] = useState<UserPreferences>(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_prefs`);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return {
-      name: '',
-      onboardingCompleted: false, // Default to false: first time user sees welcome setup!
-      weeklyGymTarget: 4,
-      prayerReminders: true,
-      theme: 'dark',
-      enabledSections: ['home', 'tuition', 'gym', 'todo', 'money', 'projects'],
-    };
+    return initialLocal.preferences || DEFAULT_PREFERENCES;
   });
 
   const [salahRecords, setSalahRecords] = useState<Record<string, SalahDayRecord>>(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_salah`);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
+    if (initialLocal.salahRecords && Object.keys(initialLocal.salahRecords).length > 0) {
+      return initialLocal.salahRecords;
+    }
     const today = getLocalDateString();
     return {
       [today]: { date: today, fajr: false, dhuhr: false, asr: false, maghrib: false, isha: false },
     };
   });
 
-  // Start with clean empty array for students (no mock data)
   const [students, setStudents] = useState<Student[]>(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_students`);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return [];
+    return initialLocal.students || [];
   });
 
-  // Single shared source of truth for tuition attendance
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_attendance`);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return [];
+    return initialLocal.attendance || [];
   });
 
-  // Single shared source of truth for tuition payments
   const [payments, setPayments] = useState<TuitionPayment[]>(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_payments`);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return [];
+    return initialLocal.payments || [];
   });
 
   const [gymGoal, setGymGoal] = useState<number>(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_gym_goal`);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return preferences.weeklyGymTarget || 4;
+    return initialLocal.gymGoal ?? initialLocal.preferences?.weeklyGymTarget ?? 4;
   });
 
   const [gymLogs, setGymLogs] = useState<Record<string, boolean>>(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_gym_logs`);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return {};
+    return initialLocal.gymLogs || {};
   });
 
-  const [workoutPlans, setWorkoutPlans] = useState<GymWorkoutPlan[]>([DEFAULT_GYM_PLAN]);
-  const [activeWorkoutPlanId, setActiveWorkoutPlanId] = useState<string>(DEFAULT_GYM_PLAN.id);
+  const [workoutPlans, setWorkoutPlans] = useState<GymWorkoutPlan[]>(() => {
+    return initialLocal.workoutPlans || [DEFAULT_GYM_PLAN];
+  });
 
-  // Clean empty array for tasks
+  const [activeWorkoutPlanId, setActiveWorkoutPlanId] = useState<string>(() => {
+    return initialLocal.activeWorkoutPlanId || DEFAULT_GYM_PLAN.id;
+  });
+
   const [tasks, setTasks] = useState<TaskItem[]>(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_tasks`);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return [];
+    return initialLocal.tasks || [];
   });
 
   const [notes, setNotes] = useState<QuickNote[]>(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_notes`);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return [];
+    return initialLocal.notes || [];
   });
 
   const [shoppingList, setShoppingList] = useState<ShoppingItem[]>(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_shopping`);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return [];
+    return initialLocal.shoppingList || [];
   });
 
   const [projects, setProjects] = useState<ProjectItem[]>(() => {
-    try {
-      const stored = localStorage.getItem(`${STORAGE_KEY}_projects`);
-      if (stored) return JSON.parse(stored);
-    } catch (e) {}
-    return [];
+    return initialLocal.projects || [];
   });
 
-  // LocalStorage Synchronizations for all personal data
-  useEffect(() => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_prefs`, JSON.stringify(preferences));
-    } catch (e) {}
-  }, [preferences]);
+  // Reference to hold current state for emergency flush on iOS freeze/hide
+  const stateRef = useRef({
+    preferences,
+    salahRecords,
+    students,
+    attendance,
+    payments,
+    gymGoal,
+    gymLogs,
+    workoutPlans,
+    activeWorkoutPlanId,
+    tasks,
+    notes,
+    shoppingList,
+    projects,
+  });
 
   useEffect(() => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_salah`, JSON.stringify(salahRecords));
-    } catch (e) {}
-  }, [salahRecords]);
+    stateRef.current = {
+      preferences,
+      salahRecords,
+      students,
+      attendance,
+      payments,
+      gymGoal,
+      gymLogs,
+      workoutPlans,
+      activeWorkoutPlanId,
+      tasks,
+      notes,
+      shoppingList,
+      projects,
+    };
+  }, [
+    preferences,
+    salahRecords,
+    students,
+    attendance,
+    payments,
+    gymGoal,
+    gymLogs,
+    workoutPlans,
+    activeWorkoutPlanId,
+    tasks,
+    notes,
+    shoppingList,
+    projects,
+  ]);
 
+  // Phase 1: Full dual-engine hydration & persistent storage request on startup
   useEffect(() => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_students`, JSON.stringify(students));
-    } catch (e) {}
-  }, [students]);
+    let isCancelled = false;
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_attendance`, JSON.stringify(attendance));
-    } catch (e) {}
-  }, [attendance]);
+    // Request non-volatile persistence on modern mobile browsers (iOS PWA / Chrome)
+    requestPersistentStorage();
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_payments`, JSON.stringify(payments));
-    } catch (e) {}
-  }, [payments]);
+    // Reconcile IndexedDB + localStorage to prevent any data loss
+    loadInitialFullState()
+      .then(reconciled => {
+        if (isCancelled) return;
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_gym_goal`, JSON.stringify(gymGoal));
-    } catch (e) {}
-  }, [gymGoal]);
+        // Apply reconciled authoritative data to state
+        if (reconciled.preferences) setPreferences(reconciled.preferences);
+        if (reconciled.salahRecords) setSalahRecords(reconciled.salahRecords);
+        if (reconciled.students) setStudents(reconciled.students);
+        if (reconciled.attendance) setAttendance(reconciled.attendance);
+        if (reconciled.payments) setPayments(reconciled.payments);
+        if (reconciled.gymGoal !== undefined) setGymGoal(reconciled.gymGoal);
+        if (reconciled.gymLogs) setGymLogs(reconciled.gymLogs);
+        if (reconciled.workoutPlans) setWorkoutPlans(reconciled.workoutPlans);
+        if (reconciled.activeWorkoutPlanId) setActiveWorkoutPlanId(reconciled.activeWorkoutPlanId);
+        if (reconciled.tasks) setTasks(reconciled.tasks);
+        if (reconciled.notes) setNotes(reconciled.notes);
+        if (reconciled.shoppingList) setShoppingList(reconciled.shoppingList);
+        if (reconciled.projects) setProjects(reconciled.projects);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_gym_logs`, JSON.stringify(gymLogs));
-    } catch (e) {}
-  }, [gymLogs]);
+        setIsStorageReady(true);
+      })
+      .catch(err => {
+        console.error('[Aetheris Storage] Startup hydration failed, continuing with local state:', err);
+        if (!isCancelled) setIsStorageReady(true);
+      });
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_tasks`, JSON.stringify(tasks));
-    } catch (e) {}
-  }, [tasks]);
+    return () => {
+      isCancelled = true;
+    };
+  }, []);
 
+  // Phase 2: Automatic persistence on every state update (only after storage is ready)
   useEffect(() => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_notes`, JSON.stringify(notes));
-    } catch (e) {}
-  }, [notes]);
+    if (!isStorageReady) return;
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_shopping`, JSON.stringify(shoppingList));
-    } catch (e) {}
-  }, [shoppingList]);
+    persistFullState({
+      preferences,
+      salahRecords,
+      students,
+      attendance,
+      payments,
+      gymGoal,
+      gymLogs,
+      workoutPlans,
+      activeWorkoutPlanId,
+      tasks,
+      notes,
+      shoppingList,
+      projects,
+    });
+  }, [
+    isStorageReady,
+    preferences,
+    salahRecords,
+    students,
+    attendance,
+    payments,
+    gymGoal,
+    gymLogs,
+    workoutPlans,
+    activeWorkoutPlanId,
+    tasks,
+    notes,
+    shoppingList,
+    projects,
+  ]);
 
+  // Phase 3: Mobile PWA lifecycle flush on visibilitychange, pagehide, and beforeunload
   useEffect(() => {
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_projects`, JSON.stringify(projects));
-    } catch (e) {}
-  }, [projects]);
+    const flushData = () => {
+      if (!isStorageReady) return;
+      persistFullState(stateRef.current);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') {
+        flushData();
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    window.addEventListener('pagehide', flushData);
+    window.addEventListener('beforeunload', flushData);
+
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      window.removeEventListener('pagehide', flushData);
+      window.removeEventListener('beforeunload', flushData);
+    };
+  }, [isStorageReady]);
 
   // Recalculate student payment status and dueAmount dynamically when payments or students change
   useEffect(() => {
@@ -668,34 +705,41 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Preferences & Onboarding
   const completeOnboarding = (prefs: Partial<UserPreferences>) => {
     setPreferences(prev => {
-      const updated = {
+      const updated: UserPreferences = {
         ...prev,
         ...prefs,
         onboardingCompleted: true,
       };
-      try {
-        localStorage.setItem(`${STORAGE_KEY}_prefs`, JSON.stringify(updated));
-      } catch (e) {}
+      // Immediately write to both stores to ensure zero latency loss
+      localSet(`${CANONICAL_STORAGE_KEY}_prefs`, updated);
+      idbSet('root_state', {
+        ...stateRef.current,
+        preferences: updated,
+      });
       return updated;
     });
   };
 
   const updatePreferences = (prefs: Partial<UserPreferences>) => {
     setPreferences(prev => {
-      const updated = { ...prev, ...prefs };
-      try {
-        localStorage.setItem(`${STORAGE_KEY}_prefs`, JSON.stringify(updated));
-      } catch (e) {}
+      const updated: UserPreferences = { ...prev, ...prefs };
+      localSet(`${CANONICAL_STORAGE_KEY}_prefs`, updated);
+      idbSet('root_state', {
+        ...stateRef.current,
+        preferences: updated,
+      });
       return updated;
     });
   };
 
   const resetOnboarding = () => {
     setPreferences(prev => {
-      const updated = { ...prev, onboardingCompleted: false };
-      try {
-        localStorage.setItem(`${STORAGE_KEY}_prefs`, JSON.stringify(updated));
-      } catch (e) {}
+      const updated: UserPreferences = { ...prev, onboardingCompleted: false };
+      localSet(`${CANONICAL_STORAGE_KEY}_prefs`, updated);
+      idbSet('root_state', {
+        ...stateRef.current,
+        preferences: updated,
+      });
       return updated;
     });
   };
@@ -714,17 +758,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         attendanceRate: s.attendanceRate,
         nextSession: s.nextSessionTime,
       })),
-      tuitionSummary: {
-        totalStudents: students.length,
-        totalMonthlyFees: students.reduce((a, b) => a + b.monthlyFee, 0),
-        totalPendingFees: students.reduce((a, b) => a + (b.dueAmount || 0), 0),
-      },
       gym: {
         weeklyGoal: gymGoal,
         completedDaysCount: Object.values(gymLogs).filter(Boolean).length,
-        currentWorkout: activeWorkoutPlan.title,
       },
-      salah: getTodaySalah(),
       projects: projects.map(p => ({
         title: p.title,
         status: p.status,
@@ -786,6 +823,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (backup.notes) setNotes(backup.notes);
       if (backup.shopping) setShoppingList(backup.shopping);
       if (backup.projects) setProjects(backup.projects);
+
+      persistFullState({
+        preferences: backup.preferences || preferences,
+        students: backup.students || students,
+        attendance: backup.attendance || attendance,
+        payments: backup.payments || payments,
+        salahRecords: backup.salah || salahRecords,
+        gymGoal: backup.preferences?.weeklyGymTarget || gymGoal,
+        gymLogs: backup.gymLog || gymLogs,
+        workoutPlans: backup.gymPlans || workoutPlans,
+        activeWorkoutPlanId: backup.gymPlans?.[0]?.id || activeWorkoutPlanId,
+        tasks: backup.tasks || tasks,
+        notes: backup.notes || notes,
+        shoppingList: backup.shopping || shoppingList,
+        projects: backup.projects || projects,
+      });
+
       return true;
     } catch (e) {
       return false;
@@ -793,6 +847,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const resetAllData = () => {
+    const emptyPrefs = { ...DEFAULT_PREFERENCES, onboardingCompleted: false };
+    setPreferences(emptyPrefs);
     setStudents([]);
     setAttendance([]);
     setPayments([]);
@@ -803,17 +859,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setGymGoal(4);
     setGymLogs({});
     setWorkoutPlans([DEFAULT_GYM_PLAN]);
+    setActiveWorkoutPlanId(DEFAULT_GYM_PLAN.id);
+
     try {
-      localStorage.removeItem(`${STORAGE_KEY}_students`);
-      localStorage.removeItem(`${STORAGE_KEY}_attendance`);
-      localStorage.removeItem(`${STORAGE_KEY}_payments`);
-      localStorage.removeItem(`${STORAGE_KEY}_tasks`);
-      localStorage.removeItem(`${STORAGE_KEY}_notes`);
-      localStorage.removeItem(`${STORAGE_KEY}_shopping`);
-      localStorage.removeItem(`${STORAGE_KEY}_projects`);
-      localStorage.removeItem(`${STORAGE_KEY}_gym_logs`);
-      localStorage.removeItem(`${STORAGE_KEY}_gym_goal`);
-      localStorage.removeItem(`${STORAGE_KEY}_prefs`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_students`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_attendance`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_payments`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_tasks`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_notes`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_shopping`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_projects`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_gym_logs`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_gym_goal`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_workout_plans`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_active_workout_plan_id`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_prefs`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_salah`);
+      idbSet('root_state', null);
     } catch (e) {}
   };
 
@@ -828,6 +890,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         setIsGeminiModalOpen,
         geminiInitialPrompt,
         setGeminiInitialPrompt,
+        isStorageReady,
 
         preferences,
         completeOnboarding,

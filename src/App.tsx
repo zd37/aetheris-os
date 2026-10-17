@@ -11,10 +11,28 @@ import { MoneyManagementScreen } from './components/money/MoneyManagementScreen'
 import { OnboardingFlow } from './components/onboarding/OnboardingFlow';
 import { GeminiModal } from './components/gemini/GeminiModal';
 import { ProfileSettingsModal } from './components/profile/ProfileSettingsModal';
+import { CyberLogo } from './components/common/CyberLogo';
 import { AnimatePresence, motion } from 'motion/react';
 
 const MainAppContent: React.FC = () => {
-  const { activeTab, preferences } = useApp();
+  const { activeTab, preferences, isStorageReady } = useApp();
+
+  // Guard: Never display Onboarding screen until persistent storage has hydrated
+  if (!isStorageReady) {
+    return (
+      <div className="fixed inset-0 bg-[#070b12] flex flex-col items-center justify-center text-[#edf5ff] z-50">
+        <div className="w-16 h-16 rounded-2xl bg-[#0c1320] border border-[#35d9ff]/30 flex items-center justify-center text-[#35d9ff] shadow-[0_0_24px_rgba(53,217,255,0.2)] mb-4">
+          <CyberLogo size="md" />
+        </div>
+        <div className="flex items-center space-x-2">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#35d9ff] animate-ping" />
+          <span className="font-mono text-xs tracking-widest uppercase text-[#91a2b8]">
+            Restoring System State...
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   if (!preferences.onboardingCompleted) {
     return <OnboardingFlow />;
