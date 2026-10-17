@@ -1,39 +1,68 @@
-﻿workflows:
-  ionic-capacitor-ios:
-    name: Ionic Capacitor iOS App
+workflows:
+  aetheris-ios:
+    name: Aetheris OS iOS Build
     max_build_duration: 60
     instance_type: mac_mini_m1
+
     environment:
       node: latest
       xcode: latest
+
     scripts:
-      - name: Install npm dependencies
+      - name: Install dependencies
         script: |
           npm install --legacy-peer-deps
+
       - name: Build web application
         script: |
           npm run build
-      - name: Capacitor sync ios
+
+      - name: Sync Capacitor
         script: |
           npx cap sync ios
-      - name: Build iOS App Binary
+
+      - name: Resolve Swift packages
         script: |
-          cd ios/App
-          xcodebuild build \
-            -workspace App.xcworkspace \
+          xcodebuild \
+            -resolvePackageDependencies \
+            -project ios/App/App.xcodeproj \
+            -scheme App
+
+      - name: Build iOS application
+        script: |
+          set -e
+
+          xcodebuild \
+            -project ios/App/App.xcodeproj \
             -scheme App \
             -configuration Release \
+            -sdk iphoneos \
             -destination "generic/platform=iOS" \
-            CODE_SIGN_IDENTITY="" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO
-      - name: Package IPA artifact
+            -derivedDataPath "$CM_BUILD_DIR/build/DerivedData" \
+            CODE_SIGNING_ALLOWED=NO \
+            build
+
+      - name: Package unsigned IPA for re-signing
         script: |
-          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "App.app" -type d | head -n 1)
-          mkdir -p "$CM_BUILD_DIR/Payload"
-          cp -r "$APP_PATH" "$CM_BUILD_DIR/Payload/"
-          cd "$CM_BUILD_DIR"
-          zip -r AetherisOS.ipa Payload
-          rm -rf Payload
-artifacts:
-  - AetherisOS.ipa
+          set -e
+
+          APP_PATH="$CM_BUILD_DIR/build/DerivedData/Build/Products/Release-iphoneos/App.app"
+          STAGING="$CM_BUILD_DIR/ipa-staging"
+
+          if [ ! -d "$APP_PATH" ]; then
+            echo "ERROR: Expected App.app was not created."
+            find "$CM_BUILD_DIR/build/DerivedData/Build/Products" -name "*.app" -type d
+            exit 1
+          fi
+
+          mkdir -p "$STAGING/Payload"
+          ditto "$APP_PATH" "$STAGING/Payload/App.app"
+
+          cd "$STAGING"
+          /usr/bin/zip -qry "$CM_BUILD_DIR/AetherisOS-unsigned.ipa" Payload
+
+          test -s "$CM_BUILD_DIR/AetherisOS-unsigned.ipa"
+          echo "Unsigned IPA container created successfully."
+
+    artifacts:
+      - AetherisOS-unsigned.ipa
