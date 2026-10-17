@@ -16,23 +16,23 @@
       - name: Capacitor sync ios
         script: |
           npx cap sync ios
-      - name: Build iOS App Archive
+      - name: Build iOS App Binary
         script: |
           cd ios/App
-          xcodebuild archive \
+          xcodebuild build \
             -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
             -destination "generic/platform=iOS" \
-            -archivePath "/build/App.xcarchive" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
       - name: Package IPA artifact
         script: |
-          mkdir -p "/Payload"
-          cp -r "/build/App.xcarchive/Products/Applications/App.app" "/Payload/"
-          cd ""
+          APP_PATH=$(find ~/Library/Developer/Xcode/DerivedData -name "App.app" -type d | head -n 1)
+          mkdir -p "$CM_BUILD_DIR/Payload"
+          cp -r "$APP_PATH" "$CM_BUILD_DIR/Payload/"
+          cd "$CM_BUILD_DIR"
           zip -r AetherisOS.ipa Payload
           rm -rf Payload
 artifacts:
