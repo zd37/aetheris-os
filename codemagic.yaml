@@ -23,15 +23,16 @@
             -workspace App.xcworkspace \
             -scheme App \
             -configuration Release \
-            -archivePath \/build/App.xcarchive \
+            -destination "generic/platform=iOS" \
+            -archivePath "/build/App.xcarchive" \
             CODE_SIGN_IDENTITY="" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO
       - name: Package IPA artifact
         script: |
-          mkdir -p \/Payload
-          cp -r \/build/App.xcarchive/Products/Applications/App.app \/Payload/
-          cd \
+          mkdir -p "/Payload"
+          cp -r "/build/App.xcarchive/Products/Applications/App.app" "/Payload/"
+          cd ""
           zip -r AetherisOS.ipa Payload
           rm -rf Payload
 artifacts:
