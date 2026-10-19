@@ -20,6 +20,7 @@ import {
   persistFullState,
   requestPersistentStorage,
   localSet,
+  localGet,
   idbSet,
   CANONICAL_STORAGE_KEY,
   DEFAULT_GYM_PLAN,
@@ -37,6 +38,8 @@ interface AppContextType {
   geminiInitialPrompt: string;
   setGeminiInitialPrompt: (prompt: string) => void;
   isStorageReady: boolean;
+  isGeminiSuggestionDismissed: boolean;
+  dismissGeminiSuggestion: (durationHours?: number) => void;
 
   // Onboarding & Preferences
   preferences: UserPreferences;
@@ -81,7 +84,15 @@ interface AppContextType {
   addTask: (task: Omit<TaskItem, 'id'>) => void;
   toggleTask: (id: string) => void;
   deleteTask: (id: string) => void;
+  restoreTask: (task: TaskItem) => void;
+  carryForwardTask: (taskId: string) => void;
   editTask: (id: string, updates: Partial<TaskItem>) => void;
+
+  // Productivity Calendar Modal
+  isProductivityCalendarOpen: boolean;
+  setIsProductivityCalendarOpen: (open: boolean) => void;
+  selectedCalendarDate: string;
+  setSelectedCalendarDate: (date: string) => void;
 
   // Notes & Shopping
   notes: QuickNote[];
@@ -136,6 +147,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [selectedStudentProfileId, setSelectedStudentProfileId] = useState<string | null>(null);
   const [isNotesModalOpen, setIsNotesModalOpen] = useState(false);
   const [isBuyModalOpen, setIsBuyModalOpen] = useState(false);
+  const [isProductivityCalendarOpen, setIsProductivityCalendarOpen] = useState(false);
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(() => getLocalDateString());
 
   // Storage hydration readiness flag: Prevents empty state overwrite before storage is ready
   const [isStorageReady, setIsStorageReady] = useState(false);
@@ -202,6 +215,26 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return initialLocal.projects || [];
   });
 
+  // Persistent Gemini Assistant suggestion dismissal (for the day or at least 4 hours)
+  const [geminiSuggestionDismissedUntil, setGeminiSuggestionDismissedUntil] = useState<number | null>(() => {
+    return localGet<number | null>(`${CANONICAL_STORAGE_KEY}_ai_dismissed_until`, null);
+  });
+
+  const isGeminiSuggestionDismissed = Boolean(
+    geminiSuggestionDismissedUntil && Date.now() < geminiSuggestionDismissedUntil
+  );
+
+  const dismissGeminiSuggestion = (durationHours: number = 4) => {
+    const now = new Date();
+    const endOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 23, 59, 59, 999).getTime();
+    const hoursFromNow = Date.now() + durationHours * 60 * 60 * 1000;
+    const until = Math.max(hoursFromNow, endOfDay);
+
+    setGeminiSuggestionDismissedUntil(until);
+    localSet(`${CANONICAL_STORAGE_KEY}_ai_dismissed_until`, until);
+    idbSet('gemini_dismissed_until', until);
+  };
+
   // Reference to hold current state for emergency flush on iOS freeze/hide
   const stateRef = useRef({
     preferences,
@@ -217,6 +250,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes,
     shoppingList,
     projects,
+    geminiSuggestionDismissedUntil,
   });
 
   useEffect(() => {
@@ -234,6 +268,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes,
       shoppingList,
       projects,
+      geminiSuggestionDismissedUntil,
     };
   }, [
     preferences,
@@ -249,6 +284,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes,
     shoppingList,
     projects,
+    geminiSuggestionDismissedUntil,
   ]);
 
   // Phase 1: Full dual-engine hydration & persistent storage request on startup
@@ -277,6 +313,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (reconciled.notes) setNotes(reconciled.notes);
         if (reconciled.shoppingList) setShoppingList(reconciled.shoppingList);
         if (reconciled.projects) setProjects(reconciled.projects);
+        if (reconciled.geminiSuggestionDismissedUntil !== undefined) {
+          setGeminiSuggestionDismissedUntil(reconciled.geminiSuggestionDismissedUntil);
+        }
 
         setIsStorageReady(true);
       })
@@ -308,6 +347,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes,
       shoppingList,
       projects,
+      geminiSuggestionDismissedUntil,
     });
   }, [
     isStorageReady,
@@ -324,6 +364,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes,
     shoppingList,
     projects,
+    geminiSuggestionDismissedUntil,
   ]);
 
   // Phase 3: Mobile PWA lifecycle flush on visibilitychange, pagehide, and beforeunload
@@ -573,6 +614,31 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const deleteTask = (id: string) => {
     setTasks(prev => prev.filter(t => t.id !== id));
+  };
+
+  const restoreTask = (task: TaskItem) => {
+    setTasks(prev => {
+      if (prev.some(t => t.id === task.id)) return prev;
+      return [task, ...prev];
+    });
+  };
+
+  const carryForwardTask = (taskId: string) => {
+    const original = tasks.find(t => t.id === taskId);
+    if (!original) return;
+
+    const todayStr = getLocalDateString();
+    const carriedTask: TaskItem = {
+      ...original,
+      id: `t-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      dueDate: todayStr,
+      period: 'daily',
+      completed: false,
+      completedAt: undefined,
+      carriedFromId: original.id,
+    };
+
+    setTasks(prev => [carriedTask, ...prev]);
   };
 
   const editTask = (id: string, updates: Partial<TaskItem>) => {
@@ -891,6 +957,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         geminiInitialPrompt,
         setGeminiInitialPrompt,
         isStorageReady,
+        isGeminiSuggestionDismissed,
+        dismissGeminiSuggestion,
 
         preferences,
         completeOnboarding,
@@ -930,7 +998,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addTask,
         toggleTask,
         deleteTask,
+        restoreTask,
+        carryForwardTask,
         editTask,
+        isProductivityCalendarOpen,
+        setIsProductivityCalendarOpen,
+        selectedCalendarDate,
+        setSelectedCalendarDate,
 
         notes,
         addNote,

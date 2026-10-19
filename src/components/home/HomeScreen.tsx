@@ -18,9 +18,12 @@ export const HomeScreen: React.FC = () => {
     setGeminiInitialPrompt,
     setIsNotesModalOpen,
     recordTodayWorkout,
+    isGeminiSuggestionDismissed,
+    dismissGeminiSuggestion,
   } = useApp();
 
-  const [isAiDismissed, setIsAiDismissed] = useState(false);
+  const [isAiDismissedLocally, setIsAiDismissedLocally] = useState(false);
+  const isAiDismissed = isGeminiSuggestionDismissed || isAiDismissedLocally;
   const [isScheduleGymDone, setIsScheduleGymDone] = useState(false);
   const [isFabOpen, setIsFabOpen] = useState(false);
   const [quickTaskTitle, setQuickTaskTitle] = useState('');
@@ -79,7 +82,8 @@ export const HomeScreen: React.FC = () => {
     });
     setIsScheduleGymDone(true);
     setTimeout(() => {
-      setIsAiDismissed(true);
+      setIsAiDismissedLocally(true);
+      dismissGeminiSuggestion(4);
     }, 2000);
   };
 
@@ -163,7 +167,10 @@ export const HomeScreen: React.FC = () => {
                       <span>Schedule Gym</span>
                     </button>
                     <button
-                      onClick={() => setIsAiDismissed(true)}
+                      onClick={() => {
+                        setIsAiDismissedLocally(true);
+                        dismissGeminiSuggestion(4);
+                      }}
                       className="inline-flex items-center rounded-full bg-[#1f314c] px-3.5 py-2 text-[#91a2b8] text-xs font-medium transition-colors hover:text-[#edf5ff] active:scale-95"
                     >
                       <span>Dismiss</span>
@@ -439,7 +446,7 @@ export const HomeScreen: React.FC = () => {
       </div>
 
       {/* Floating Action Button (+) */}
-      <div className="fixed right-5 bottom-24 z-30">
+      <div className="fixed right-5 bottom-28 sm:bottom-32 z-30">
         <button
           onClick={() => setIsFabOpen(!isFabOpen)}
           aria-label="Add new item"

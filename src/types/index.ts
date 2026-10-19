@@ -98,6 +98,7 @@ export interface TaskItem {
   dueTime?: string;
   period: 'daily' | 'weekly' | 'monthly';
   completedAt?: string;
+  carriedFromId?: string;
 }
 
 export interface QuickNote {

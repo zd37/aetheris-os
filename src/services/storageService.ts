@@ -40,6 +40,7 @@ export interface FullPersistedState {
   shoppingList: ShoppingItem[];
   projects: ProjectItem[];
   activeTab?: ActiveTab;
+  geminiSuggestionDismissedUntil?: number | null;
 }
 
 export const DEFAULT_GYM_PLAN: GymWorkoutPlan = {
@@ -419,6 +420,10 @@ export async function loadInitialFullState(): Promise<FullPersistedState> {
       ? localState.projects
       : [];
 
+  const geminiSuggestionDismissedUntil: number | null =
+    idbState?.geminiSuggestionDismissedUntil ??
+    localGet<number | null>(`${CANONICAL_STORAGE_KEY}_ai_dismissed_until`, null);
+
   const reconciled: FullPersistedState = {
     preferences,
     salahRecords,
@@ -433,6 +438,7 @@ export async function loadInitialFullState(): Promise<FullPersistedState> {
     notes,
     shoppingList,
     projects,
+    geminiSuggestionDismissedUntil,
   };
 
   // 4. Synchronize canonical keys immediately in both storage engines
@@ -457,6 +463,9 @@ export function persistFullState(state: FullPersistedState) {
   localSet(`${CANONICAL_STORAGE_KEY}_notes`, state.notes);
   localSet(`${CANONICAL_STORAGE_KEY}_shopping`, state.shoppingList);
   localSet(`${CANONICAL_STORAGE_KEY}_projects`, state.projects);
+  if (state.geminiSuggestionDismissedUntil !== undefined) {
+    localSet(`${CANONICAL_STORAGE_KEY}_ai_dismissed_until`, state.geminiSuggestionDismissedUntil);
+  }
 
   // 2. Write to IndexedDB
   idbSet('root_state', state);

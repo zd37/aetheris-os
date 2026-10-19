@@ -189,11 +189,6 @@ export const BottomNavigation: React.FC = () => {
             );
           })}
         </div>
-
-        {/* iOS Home Indicator Bar */}
-        <div className="flex justify-center pb-2">
-          <div className="w-32 h-1 bg-[#91a2b8]/20 rounded-full" />
-        </div>
       </nav>
     </>
   );
