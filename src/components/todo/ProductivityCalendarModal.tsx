@@ -163,27 +163,25 @@ export const ProductivityCalendarModal: React.FC<ProductivityCalendarModalProps>
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4">
       {/* Backdrop */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.22, ease: 'easeOut' }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
         className="absolute inset-0 bg-black/80 backdrop-blur-md"
         onClick={onClose}
       />
 
-      {/* Sheet Container */}
+      {/* Centered Modal Container (Pops forward from behind) */}
       <motion.div
-        initial={{ y: '100%', opacity: 0.6 }}
-        animate={{ y: 0, opacity: 1 }}
-        exit={{ y: '100%', opacity: 0.6 }}
-        transition={{ duration: 0.26, ease: [0.16, 1, 0.3, 1] }}
-        className="relative z-10 w-full max-w-lg bg-[#0c1320] border-t border-[#202c3d]/70 rounded-t-3xl shadow-2xl max-h-[90vh] flex flex-col overflow-hidden text-[#edf5ff]"
+        initial={{ scale: 0.82, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        exit={{ scale: 0.82, opacity: 0 }}
+        transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+        className="relative z-10 w-full max-w-lg bg-[#0c1320] border border-[#202c3d]/80 rounded-3xl shadow-2xl max-h-[88vh] flex flex-col overflow-hidden text-[#edf5ff]"
       >
-        {/* iOS Handle */}
-        <div className="w-12 h-1 bg-[#202c3d] rounded-full mx-auto mt-3 mb-1 shrink-0" />
 
         {/* Carry Forward Feedback Toast */}
         <AnimatePresence>
@@ -309,7 +307,7 @@ export const ProductivityCalendarModal: React.FC<ProductivityCalendarModalProps>
                           <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-[#35d9ff] shadow-[0_0_6px_#35d9ff]" />
                         )}
 
-                        {/* Date Number */}
+                        {/* Date Number with Color-Coded Background & Border (No Red Dots) */}
                         <span
                           className={`text-xs font-mono font-semibold ${
                             isSelected ? 'text-[#35d9ff] font-bold' : prod.textColor
@@ -317,15 +315,6 @@ export const ProductivityCalendarModal: React.FC<ProductivityCalendarModalProps>
                         >
                           {dayNum}
                         </span>
-
-                        {/* Productivity Indicator Dot */}
-                        <div className="flex items-center justify-center mt-0.5 h-1.5">
-                          {prod.hasTasks && (
-                            <span
-                              className={`w-1.5 h-1.5 rounded-full ${prod.dotColor} shadow-sm`}
-                            />
-                          )}
-                        </div>
                       </button>
                     );
                   })}
@@ -618,12 +607,12 @@ export const ProductivityCalendarModal: React.FC<ProductivityCalendarModalProps>
               <div className="bg-[#090f19] p-3.5 rounded-2xl border border-[#202c3d]/40 flex flex-col space-y-2.5">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center space-x-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#cdbdff]" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-[#5cffb7]" />
                     <h4 className="text-xs font-bold text-[#edf5ff] tracking-wide uppercase font-mono">
                       Salah Prayer Tracker
                     </h4>
                   </div>
-                  <span className="font-mono text-[10px] text-[#cdbdff]">
+                  <span className="font-mono text-[10px] text-[#5cffb7] font-semibold">
                     {[
                       selectedDaySalah.fajr,
                       selectedDaySalah.dhuhr,
@@ -651,14 +640,14 @@ export const ProductivityCalendarModal: React.FC<ProductivityCalendarModalProps>
                         key={prayer.key}
                         className={`p-2 rounded-xl text-center border flex flex-col items-center justify-center space-y-1 transition-all ${
                           isOffered
-                            ? 'bg-[#cdbdff]/15 border-[#cdbdff]/40 text-[#cdbdff]'
+                            ? 'bg-[#5cffb7] text-[#003822] border-[#5cffb7] shadow-[0_0_10px_rgba(92,255,183,0.35)]'
                             : 'bg-[#0c1320] border-[#202c3d]/30 text-[#91a2b8]'
                         }`}
                       >
-                        <span className="material-symbols-outlined text-[15px]">
+                        <span className={`material-symbols-outlined text-[15px] ${isOffered ? 'text-[#003822] font-bold' : 'text-[#91a2b8]/60'}`}>
                           {isOffered ? 'check_circle' : 'radio_button_unchecked'}
                         </span>
-                        <span className="font-mono text-[10px] font-semibold">
+                        <span className={`font-mono text-[10px] font-semibold ${isOffered ? 'text-[#003822] font-bold' : 'text-[#91a2b8]'}`}>
                           {prayer.label}
                         </span>
                       </div>

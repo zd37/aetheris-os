@@ -39,10 +39,18 @@ export const HomeScreen: React.FC = () => {
     todaySalah.isha,
   ].filter(Boolean).length;
 
-  const todayTasks = tasks.filter(t => t.period === 'daily');
+  const todayStr = getLocalDateString();
+  const todayTasks = tasks.filter(
+    t => t.period === 'daily' && (t.dueDate === todayStr || (!t.dueDate && !t.completed))
+  );
   const completedTasksCount = todayTasks.filter(t => t.completed).length;
   const taskProgressPercent =
     todayTasks.length > 0 ? Math.round((completedTasksCount / todayTasks.length) * 100) : 0;
+
+  // Past unfinished tasks check
+  const unfinishedPastTasks = tasks.filter(
+    t => t.period === 'daily' && !t.completed && t.dueDate && t.dueDate < todayStr
+  );
 
   // Format date display
   const now = new Date();
@@ -352,7 +360,12 @@ export const HomeScreen: React.FC = () => {
         {/* 5. Tasks Section */}
         <section className="flex flex-col space-y-3">
           <div className="flex items-center justify-between px-1">
-            <h3 className="text-lg font-semibold text-[#edf5ff]">Tasks</h3>
+            <div className="flex items-center space-x-2">
+              <h3 className="text-lg font-semibold text-[#edf5ff]">Today's Focus</h3>
+              <span className="text-[11px] font-mono text-[#91a2b8]">
+                ({completedTasksCount}/{todayTasks.length})
+              </span>
+            </div>
             <button
               onClick={() => setActiveTab('todo')}
               className="font-mono text-xs text-[#35d9ff] hover:underline font-medium"
@@ -363,16 +376,33 @@ export const HomeScreen: React.FC = () => {
 
           <div className="flex flex-col space-y-2.5">
             {todayTasks.length === 0 ? (
-              <div className="p-4 rounded-2xl bg-[#090f19] border border-[#202c3d]/30 text-center space-y-1.5">
-                <p className="text-xs text-[#91a2b8]">No daily tasks yet.</p>
-                <button
-                  type="button"
-                  onClick={() => setShowQuickAddModal(true)}
-                  className="text-xs text-[#35d9ff] font-mono hover:underline inline-flex items-center space-x-1"
-                >
-                  <span className="material-symbols-outlined text-[14px]">add</span>
-                  <span>Add your first task</span>
-                </button>
+              <div className="p-4 rounded-2xl bg-[#090f19] border border-[#202c3d]/30 text-center space-y-2">
+                <p className="text-xs text-[#91a2b8]">No tasks scheduled for today.</p>
+                {unfinishedPastTasks.length > 0 && (
+                  <p className="text-[11px] text-[#facc15] font-mono">
+                    You have {unfinishedPastTasks.length} unfinished task(s) from earlier days.
+                  </p>
+                )}
+                <div className="flex items-center justify-center space-x-3 pt-1">
+                  {unfinishedPastTasks.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('todo')}
+                      className="text-xs text-[#facc15] font-mono hover:underline inline-flex items-center space-x-1"
+                    >
+                      <span className="material-symbols-outlined text-[14px]">history</span>
+                      <span>Review in To-do</span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowQuickAddModal(true)}
+                    className="text-xs text-[#35d9ff] font-mono hover:underline inline-flex items-center space-x-1"
+                  >
+                    <span className="material-symbols-outlined text-[14px]">add</span>
+                    <span>Add today's task</span>
+                  </button>
+                </div>
               </div>
             ) : (
               todayTasks.slice(0, 5).map(task => {

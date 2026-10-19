@@ -21,92 +21,60 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
   isRevealed,
   onReveal,
 }) => {
-  const touchStartXRef = useRef<number | null>(null);
-  const touchStartYRef = useRef<number | null>(null);
-  const [dragOffset, setDragOffset] = useState<number>(0);
-  const isDraggingRef = useRef<boolean>(false);
-
   const isChecked = task.completed;
 
-  // Touch handlers for mobile swipe-to-delete
-  const handleTouchStart = (e: React.TouchEvent) => {
-    touchStartXRef.current = e.touches[0].clientX;
-    touchStartYRef.current = e.touches[0].clientY;
-    isDraggingRef.current = false;
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (touchStartXRef.current === null || touchStartYRef.current === null) return;
-    const currentX = e.touches[0].clientX;
-    const currentY = e.touches[0].clientY;
-    const deltaX = currentX - touchStartXRef.current;
-    const deltaY = currentY - touchStartYRef.current;
-
-    // Distinguish horizontal swipe from vertical scroll
-    if (Math.abs(deltaX) > Math.abs(deltaY) && Math.abs(deltaX) > 10) {
-      isDraggingRef.current = true;
-      // Only allow swiping left (negative deltaX)
-      if (deltaX < 0) {
-        setDragOffset(Math.max(deltaX, -80));
-      } else if (isRevealed) {
-        // Swiping right when already revealed closes it
-        setDragOffset(Math.min(deltaX - 72, 0));
-      }
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (touchStartXRef.current === null) return;
-    if (isDraggingRef.current) {
-      if (dragOffset < -40) {
-        onReveal(task.id);
-        setDragOffset(-72);
-      } else {
-        onReveal(null);
-        setDragOffset(0);
-      }
-    }
-    touchStartXRef.current = null;
-    touchStartYRef.current = null;
-    isDraggingRef.current = false;
-  };
-
-  // Close reveal if another item is revealed
-  const currentOffset = isRevealed ? -72 : dragOffset !== 0 ? dragOffset : 0;
-
   return (
-    <div className="relative overflow-hidden rounded-2xl group select-none">
-      {/* Background Revealed Delete Action (Revealed on Swipe) */}
-      <div className="absolute inset-y-0 right-0 w-[72px] bg-[#ff5c78] flex items-center justify-center rounded-r-2xl z-0">
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 8 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{
+        opacity: 0,
+        x: -120,
+        height: 0,
+        marginBottom: 0,
+        overflow: 'hidden',
+        transition: { duration: 0.26, ease: [0.16, 1, 0.3, 1] },
+      }}
+      transition={{ duration: 0.2 }}
+      className="relative overflow-hidden rounded-2xl group select-none"
+    >
+      {/* Background YouTube-style Red Delete Button */}
+      <div className="absolute inset-y-0 right-0 w-[84px] bg-[#ff5c78] flex items-center justify-center rounded-r-2xl z-0">
         <button
           type="button"
           onClick={e => {
             e.stopPropagation();
             onDelete(task);
           }}
-          className="w-full h-full flex flex-col items-center justify-center text-[#070b12] active:scale-95 transition-transform"
+          className="w-full h-full flex flex-col items-center justify-center text-[#070b12] active:scale-90 transition-transform"
           aria-label={`Delete ${task.title}`}
         >
-          <span className="material-symbols-outlined text-[20px] font-bold">delete</span>
+          <span className="material-symbols-outlined text-[22px] font-bold">delete</span>
           <span className="font-mono text-[10px] font-bold uppercase tracking-wider mt-0.5">
             Delete
           </span>
         </button>
       </div>
 
-      {/* Foreground Task Card */}
-      <div
-        onTouchStart={handleTouchStart}
-        onTouchMove={handleTouchMove}
-        onTouchEnd={handleTouchEnd}
-        style={{
-          transform: `translateX(${currentOffset}px)`,
-          transition: isDraggingRef.current ? 'none' : 'transform 0.22s cubic-bezier(0.16, 1, 0.3, 1)',
+      {/* Foreground Draggable Task Card */}
+      <motion.div
+        drag="x"
+        dragConstraints={{ left: -84, right: 0 }}
+        dragElastic={0.08}
+        dragDirectionLock
+        animate={{ x: isRevealed ? -84 : 0 }}
+        transition={{ type: 'spring', damping: 26, stiffness: 320 }}
+        onDragEnd={(_, info) => {
+          if (info.offset.x < -36 || info.velocity.x < -250) {
+            onReveal(task.id);
+          } else {
+            onReveal(null);
+          }
         }}
         onClick={() => {
           if (isRevealed) {
             onReveal(null);
-            setDragOffset(0);
           }
         }}
         className={`relative z-10 flex items-start p-4 rounded-2xl transition-colors border ${
@@ -119,6 +87,10 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
         <div
           onClick={e => {
             e.stopPropagation();
+            if (isRevealed) {
+              onReveal(null);
+              return;
+            }
             onToggle(task.id);
           }}
           className="pt-0.5 mr-3.5 cursor-pointer shrink-0"
@@ -136,11 +108,17 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
 
         {/* Task Title & Metadata */}
         <div
-          onClick={() => onToggle(task.id)}
+          onClick={() => {
+            if (isRevealed) {
+              onReveal(null);
+              return;
+            }
+            onToggle(task.id);
+          }}
           className="flex-1 min-w-0 cursor-pointer pr-1"
         >
           <p
-            className={`text-[15px] font-medium leading-snug break-words ${
+            className={`text-[15px] font-medium leading-snug break-words transition-all ${
               isChecked ? 'line-through text-[#91a2b8]' : 'text-[#edf5ff]'
             }`}
           >
@@ -164,17 +142,6 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
                 {task.dueTime ? `Due ${task.dueTime}` : 'Due Today'}
               </span>
             )}
-
-            <span className="text-[#43556d]">•</span>
-            <span className="text-[#91a2b8] bg-[#090f19] px-2 py-0.5 rounded">
-              {task.category === 'Uni'
-                ? 'University'
-                : task.category === 'Tuition'
-                ? 'Tuition'
-                : task.category === 'Health'
-                ? 'Gym'
-                : 'Personal'}
-            </span>
           </div>
         </div>
 
@@ -191,8 +158,8 @@ const SwipeableTaskCard: React.FC<SwipeableTaskCardProps> = ({
         >
           <span className="material-symbols-outlined text-[16px]">delete</span>
         </button>
-      </div>
-    </div>
+      </motion.div>
+    </motion.div>
   );
 };
 
@@ -378,40 +345,21 @@ export const TodoScreen: React.FC = () => {
                 />
               </div>
 
-              {/* Tag & Category Selector */}
-              <div className="flex items-center justify-between flex-wrap gap-2 pt-1">
-                <div className="flex items-center space-x-1.5 font-mono text-[11px]">
-                  {(['Uni', 'Tuition', 'Health', 'Personal'] as TaskCategory[]).map(cat => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setNewTaskCategory(cat)}
-                      className={`px-2 py-1 rounded transition-colors ${
-                        newTaskCategory === cat
-                          ? 'bg-[#35d9ff] text-[#003641] font-bold'
-                          : 'bg-[#162338] text-[#91a2b8]'
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <button
-                    type="button"
-                    onClick={() => setShowNewTaskPanel(false)}
-                    className="px-3 py-1.5 text-[#91a2b8] hover:text-[#edf5ff] font-mono text-xs"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="bg-[#35d9ff] text-[#003641] px-4 py-1.5 rounded-xl font-mono text-xs font-semibold active:scale-95 shadow-md"
-                  >
-                    Add Task
-                  </button>
-                </div>
+              {/* Action Buttons: Cancel and Add Task */}
+              <div className="flex items-center justify-end space-x-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowNewTaskPanel(false)}
+                  className="px-3 py-1.5 text-[#91a2b8] hover:text-[#edf5ff] font-mono text-xs transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="bg-[#35d9ff] text-[#003641] px-4 py-1.5 rounded-xl font-mono text-xs font-semibold active:scale-95 shadow-md hover:bg-[#b5edff] transition-colors"
+                >
+                  Add Task
+                </button>
               </div>
             </form>
           )}
@@ -425,16 +373,18 @@ export const TodoScreen: React.FC = () => {
                   : 'No tasks logged for this timeframe. Tap "+ New Task" to schedule one.'}
               </div>
             ) : (
-              filteredTasks.map(task => (
-                <SwipeableTaskCard
-                  key={task.id}
-                  task={task}
-                  onToggle={toggleTask}
-                  onDelete={handleDeleteTask}
-                  isRevealed={revealedTaskId === task.id}
-                  onReveal={setRevealedTaskId}
-                />
-              ))
+              <AnimatePresence initial={false}>
+                {filteredTasks.map(task => (
+                  <SwipeableTaskCard
+                    key={task.id}
+                    task={task}
+                    onToggle={toggleTask}
+                    onDelete={handleDeleteTask}
+                    isRevealed={revealedTaskId === task.id}
+                    onReveal={setRevealedTaskId}
+                  />
+                ))}
+              </AnimatePresence>
             )}
           </div>
         </div>
@@ -469,22 +419,22 @@ export const TodoScreen: React.FC = () => {
         )}
       </AnimatePresence>
 
-      {/* Floating Productivity Calendar Action Button (Moved to bottom right per screenshot) */}
-      <div className="fixed right-5 bottom-24 sm:bottom-28 z-30">
+      {/* Circular Floating Productivity Calendar Action Button (Elevated per request) */}
+      <div className="fixed right-5 bottom-28 sm:bottom-32 z-30">
         <motion.button
           type="button"
-          whileHover={{ scale: 1.05 }}
+          whileHover={{ scale: 1.08 }}
           whileTap={{ scale: 0.92 }}
           onClick={() => setIsProductivityCalendarOpen(true)}
           aria-label="View daily history and productivity calendar"
           title="Daily History & Productivity Calendar"
-          className="group relative flex h-14 w-14 items-center justify-center rounded-2xl bg-[#0c1320]/95 backdrop-blur-md text-[#35d9ff] border border-[#35d9ff]/50 shadow-[0_4px_24px_rgba(0,0,0,0.65),0_0_16px_rgba(53,217,255,0.3)] hover:border-[#35d9ff] hover:shadow-[0_0_24px_rgba(53,217,255,0.55)] transition-all focus:outline-none"
+          className="group relative flex h-14 w-14 items-center justify-center rounded-full bg-[#0c1320]/95 backdrop-blur-md text-[#35d9ff] border-2 border-[#35d9ff]/50 shadow-[0_6px_28px_rgba(0,0,0,0.65),0_0_20px_rgba(53,217,255,0.35)] hover:border-[#35d9ff] hover:shadow-[0_0_28px_rgba(53,217,255,0.6)] transition-all focus:outline-none"
         >
           <span className="material-symbols-outlined text-[26px] font-semibold transition-transform duration-200 group-hover:scale-110">
             calendar_month
           </span>
           {/* Subtle indicator beacon */}
-          <span className="absolute -top-1 -right-1 flex h-3 w-3">
+          <span className="absolute -top-0.5 -right-0.5 flex h-3 w-3">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#35d9ff] opacity-40"></span>
             <span className="relative inline-flex rounded-full h-3 w-3 bg-[#35d9ff] border-2 border-[#070b12]"></span>
           </span>
