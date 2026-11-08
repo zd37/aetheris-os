@@ -9,6 +9,8 @@ import {
   QuickNote,
   ShoppingItem,
   ProjectItem,
+  TransactionItem,
+  NotificationPreferences,
   ActiveTab,
 } from '../types';
 
@@ -39,6 +41,8 @@ export interface FullPersistedState {
   notes: QuickNote[];
   shoppingList: ShoppingItem[];
   projects: ProjectItem[];
+  transactions?: TransactionItem[];
+  notificationPreferences?: NotificationPreferences;
   activeTab?: ActiveTab;
   geminiSuggestionDismissedUntil?: number | null;
 }
@@ -420,6 +424,24 @@ export async function loadInitialFullState(): Promise<FullPersistedState> {
       ? localState.projects
       : [];
 
+  const transactions: TransactionItem[] =
+    (idbState?.transactions && idbState.transactions.length > 0)
+      ? idbState.transactions
+      : (localState.transactions && localState.transactions.length > 0)
+      ? localState.transactions
+      : [];
+
+  const notificationPreferences: NotificationPreferences =
+    idbState?.notificationPreferences ||
+    localState.notificationPreferences || {
+      enabled: true,
+      morningEnabled: true,
+      morningTime: '09:00',
+      eveningEnabled: true,
+      eveningTime: '20:00',
+      soundEnabled: true,
+    };
+
   const geminiSuggestionDismissedUntil: number | null =
     idbState?.geminiSuggestionDismissedUntil ??
     localGet<number | null>(`${CANONICAL_STORAGE_KEY}_ai_dismissed_until`, null);
@@ -438,6 +460,8 @@ export async function loadInitialFullState(): Promise<FullPersistedState> {
     notes,
     shoppingList,
     projects,
+    transactions,
+    notificationPreferences,
     geminiSuggestionDismissedUntil,
   };
 
@@ -463,6 +487,12 @@ export function persistFullState(state: FullPersistedState) {
   localSet(`${CANONICAL_STORAGE_KEY}_notes`, state.notes);
   localSet(`${CANONICAL_STORAGE_KEY}_shopping`, state.shoppingList);
   localSet(`${CANONICAL_STORAGE_KEY}_projects`, state.projects);
+  if (state.transactions) {
+    localSet(`${CANONICAL_STORAGE_KEY}_transactions`, state.transactions);
+  }
+  if (state.notificationPreferences) {
+    localSet(`${CANONICAL_STORAGE_KEY}_notifications`, state.notificationPreferences);
+  }
   if (state.geminiSuggestionDismissedUntil !== undefined) {
     localSet(`${CANONICAL_STORAGE_KEY}_ai_dismissed_until`, state.geminiSuggestionDismissedUntil);
   }

@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useApp, getLocalDateString } from '../../context/AppContext';
 import { motion, AnimatePresence } from 'motion/react';
 import confetti from 'canvas-confetti';
+import { triggerHaptic } from '../../utils/haptics';
 
 export const HomeScreen: React.FC = () => {
   const {
@@ -64,9 +65,11 @@ export const HomeScreen: React.FC = () => {
 
   const handleSalahClick = (prayer: 'fajr' | 'dhuhr' | 'asr' | 'maghrib' | 'isha') => {
     const willComplete = !todaySalah[prayer];
+    triggerHaptic('selection');
     togglePrayer(prayer);
     if (willComplete && completedSalahCount === 4) {
       // Completed all 5 prayers!
+      triggerHaptic('success');
       try {
         confetti({
           particleCount: 50,
@@ -78,7 +81,14 @@ export const HomeScreen: React.FC = () => {
     }
   };
 
+  const handleDismissGemini = () => {
+    triggerHaptic('light');
+    setIsAiDismissedLocally(true);
+    dismissGeminiSuggestion(4);
+  };
+
   const handleScheduleGym = () => {
+    triggerHaptic('success');
     addTask({
       title: 'Gym: Upper Body Push (45m)',
       completed: false,
@@ -106,6 +116,7 @@ export const HomeScreen: React.FC = () => {
       dueDate: getLocalDateString(),
       period: 'daily',
     });
+    triggerHaptic('success');
     setQuickTaskTitle('');
     setShowQuickAddModal(false);
   };
@@ -129,10 +140,20 @@ export const HomeScreen: React.FC = () => {
         <AnimatePresence>
           {!isAiDismissed && (
             <motion.section
-              initial={{ opacity: 0, y: -8 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, height: 0, marginBottom: 0 }}
-              transition={{ duration: 0.25 }}
+              initial={{ opacity: 0, y: -8, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{
+                opacity: 0,
+                scale: 0.96,
+                height: 0,
+                marginTop: 0,
+                marginBottom: 0,
+                paddingTop: 0,
+                paddingBottom: 0,
+                overflow: 'hidden',
+                transition: { duration: 0.28, ease: [0.16, 1, 0.3, 1] },
+              }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
               className="relative overflow-hidden rounded-2xl bg-[#162338]/60 backdrop-blur-xl p-5 shadow-sm border border-[#202c3d]/40 transition-all hover:bg-[#162338]/80"
             >
               {/* Subtle violet ambient glow pool */}
@@ -148,15 +169,30 @@ export const HomeScreen: React.FC = () => {
                       Gemini Assistant
                     </span>
                   </div>
-                  <button
-                    onClick={() => {
-                      setGeminiInitialPrompt('Analyze my day and suggest optimal focus blocks.');
-                      setIsGeminiModalOpen(true);
-                    }}
-                    className="text-[11px] font-mono text-[#35d9ff] hover:underline"
-                  >
-                    Open Copilot
-                  </button>
+
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => {
+                        triggerHaptic('light');
+                        setGeminiInitialPrompt('Analyze my day and suggest optimal focus blocks.');
+                        setIsGeminiModalOpen(true);
+                      }}
+                      className="text-[11px] font-mono text-[#35d9ff] hover:underline"
+                    >
+                      Open Copilot
+                    </button>
+
+                    {/* Direct Close X Button */}
+                    <button
+                      type="button"
+                      onClick={handleDismissGemini}
+                      className="w-6 h-6 rounded-full bg-[#0c1320]/60 hover:bg-[#0c1320] text-[#91a2b8] hover:text-[#edf5ff] flex items-center justify-center transition-colors active:scale-90"
+                      title="Dismiss Gemini Suggestion"
+                      aria-label="Dismiss Gemini Suggestion"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">close</span>
+                    </button>
+                  </div>
                 </div>
 
                 <p className="text-[15px] text-[#edf5ff] leading-relaxed">
@@ -175,10 +211,7 @@ export const HomeScreen: React.FC = () => {
                       <span>Schedule Gym</span>
                     </button>
                     <button
-                      onClick={() => {
-                        setIsAiDismissedLocally(true);
-                        dismissGeminiSuggestion(4);
-                      }}
+                      onClick={handleDismissGemini}
                       className="inline-flex items-center rounded-full bg-[#1f314c] px-3.5 py-2 text-[#91a2b8] text-xs font-medium transition-colors hover:text-[#edf5ff] active:scale-95"
                     >
                       <span>Dismiss</span>
@@ -455,19 +488,11 @@ export const HomeScreen: React.FC = () => {
                     </div>
                   </div>
 
-                  <span
-                    className={`shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] font-medium ${
-                      task.category === 'Uni'
-                        ? 'bg-[#162338] text-[#35d9ff]'
-                        : task.category === 'Tuition'
-                        ? 'bg-[#162338] text-[#cdbdff]'
-                        : task.category === 'Health'
-                        ? 'bg-[#162338] text-[#5cffb7]'
-                        : 'bg-[#0c1320] text-[#91a2b8]'
-                    }`}
-                  >
-                    {isChecked ? 'Done' : task.category}
-                  </span>
+                  {isChecked && (
+                    <span className="shrink-0 rounded-full px-2 py-0.5 font-mono text-[10px] font-medium bg-[#5cffb7]/15 text-[#5cffb7]">
+                      Done
+                    </span>
+                  )}
                 </div>
               );
             }))}

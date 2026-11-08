@@ -184,12 +184,12 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ studen
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ type: 'spring', damping: 26, stiffness: 280 }}
-        className="relative z-10 w-full max-w-lg bg-[#0c1320] border-t sm:border border-[#202c3d]/60 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl max-h-[92vh] flex flex-col space-y-4 overflow-y-auto"
+        className="relative z-10 w-full max-w-lg h-[86vh] max-h-[86vh] bg-[#0c1320] border-t sm:border border-[#202c3d]/60 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl flex flex-col overflow-hidden"
       >
-        <div className="w-12 h-1.5 bg-[#202c3d] rounded-full mx-auto" />
+        <div className="w-12 h-1.5 bg-[#202c3d] rounded-full mx-auto shrink-0 mb-3" />
 
         {/* Student Top Summary Header */}
-        <div className="flex items-start justify-between pb-3 border-b border-[#202c3d]/40">
+        <div className="flex items-start justify-between pb-3 border-b border-[#202c3d]/40 shrink-0">
           <div className="flex items-center space-x-3 min-w-0 pr-2">
             <div className="w-11 h-11 rounded-xl bg-[#162338] border border-[#35d9ff]/30 text-[#35d9ff] font-bold font-mono text-base flex items-center justify-center shadow-sm shrink-0">
               {student.initials}
@@ -212,8 +212,8 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ studen
           </button>
         </div>
 
-        {/* Subtabs: Attendance, Tuition Money, Student Info */}
-        <div className="w-full bg-[#090f19] p-1 rounded-xl flex items-center font-mono text-xs">
+        {/* Subtabs: Attendance, Fees, Profile Info */}
+        <div className="w-full bg-[#090f19] p-1 rounded-xl flex items-center font-mono text-xs shrink-0 my-3">
           <button
             type="button"
             onClick={() => setActiveSubTab('attendance')}
@@ -234,7 +234,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ studen
                 : 'text-[#91a2b8] hover:text-[#edf5ff]'
             }`}
           >
-            Fees &amp; ৳ ({outstandingBalance > 0 ? `৳${outstandingBalance}` : 'Paid'})
+            Fees
           </button>
           <button
             type="button"
@@ -252,9 +252,12 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ studen
           </button>
         </div>
 
+        {/* Shared Scrollable Content Area: Zero jumping between tabs */}
+        <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+
         {/* ================= TAB 1: ATTENDANCE & INDIVIDUAL CALENDAR ================= */}
         {activeSubTab === 'attendance' && (
-          <div className="space-y-3.5 overflow-y-auto max-h-[62vh] pr-1">
+          <div className="space-y-3.5 pb-4">
             {/* Class Progress Card */}
             <div className="bg-[#090f19] p-3.5 rounded-2xl border border-[#202c3d]/40 space-y-2">
               <div className="flex justify-between items-center text-xs">
@@ -417,7 +420,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ studen
 
         {/* ================= TAB 2: TUITION FEES & PAYMENTS ================= */}
         {activeSubTab === 'payments' && (
-          <div className="space-y-3.5 overflow-y-auto max-h-[62vh] pr-1">
+          <div className="space-y-3.5 pb-4">
             {/* Financial Overview Card */}
             <div className="grid grid-cols-3 gap-2 font-mono text-center">
               <div className="p-2.5 rounded-xl bg-[#090f19] border border-[#202c3d]/40">
@@ -580,7 +583,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ studen
 
         {/* ================= TAB 3: STUDENT PROFILE INFO & EDITING ================= */}
         {activeSubTab === 'info' && (
-          <div className="space-y-3.5 overflow-y-auto max-h-[62vh] pr-1">
+          <div className="space-y-3.5 pb-4">
             {!isEditingInfo ? (
               <div className="space-y-3">
                 {/* Details Card */}
@@ -850,6 +853,7 @@ export const StudentProfileModal: React.FC<StudentProfileModalProps> = ({ studen
             )}
           </div>
         )}
+        </div>
       </motion.div>
     </div>
   );

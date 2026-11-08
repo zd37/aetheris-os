@@ -91,14 +91,38 @@ export interface GymWorkoutPlan {
 export interface TaskItem {
   id: string;
   title: string;
+  description?: string;
   completed: boolean;
   priority: Priority;
   category: TaskCategory;
-  dueDate: string; // YYYY-MM-DD
+  dueDate: string; // YYYY-MM-DD (Assigned Date)
   dueTime?: string;
   period: 'daily' | 'weekly' | 'monthly';
-  completedAt?: string;
+  completedAt?: string; // ISO string or timestamp of actual completion date
   carriedFromId?: string;
+}
+
+export type TransactionType = 'income' | 'expense';
+
+export interface TransactionItem {
+  id: string;
+  type: TransactionType;
+  amount: number;
+  category: string;
+  date: string; // YYYY-MM-DD
+  description?: string;
+  paymentMethod?: string; // Cash, bKash, Nagad, Bank, etc.
+  createdAt: string;
+  isLegacyTuition?: boolean;
+}
+
+export interface NotificationPreferences {
+  enabled: boolean;
+  morningEnabled: boolean;
+  morningTime: string; // e.g. "09:00"
+  eveningEnabled: boolean;
+  eveningTime: string; // e.g. "20:00"
+  soundEnabled: boolean;
 }
 
 export interface QuickNote {
@@ -150,4 +174,6 @@ export interface AppDataBackup {
   notes: QuickNote[];
   shopping: ShoppingItem[];
   projects: ProjectItem[];
+  transactions?: TransactionItem[];
+  notifications?: NotificationPreferences;
 }

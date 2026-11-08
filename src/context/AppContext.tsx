@@ -13,6 +13,8 @@ import {
   AppDataBackup,
   ActiveTab,
   AppSection,
+  TransactionItem,
+  NotificationPreferences,
 } from '../types';
 import {
   loadFromLocalStorageWithMigration,
@@ -87,6 +89,16 @@ interface AppContextType {
   restoreTask: (task: TaskItem) => void;
   carryForwardTask: (taskId: string) => void;
   editTask: (id: string, updates: Partial<TaskItem>) => void;
+
+  // Transactions (Manual Money Management)
+  transactions: TransactionItem[];
+  addTransaction: (tx: Omit<TransactionItem, 'id' | 'createdAt'>) => void;
+  updateTransaction: (id: string, updates: Partial<TransactionItem>) => void;
+  deleteTransaction: (id: string) => void;
+
+  // Notification Preferences
+  notificationPreferences: NotificationPreferences;
+  updateNotificationPreferences: (prefs: Partial<NotificationPreferences>) => void;
 
   // Productivity Calendar Modal
   isProductivityCalendarOpen: boolean;
@@ -215,6 +227,23 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return initialLocal.projects || [];
   });
 
+  const [transactions, setTransactions] = useState<TransactionItem[]>(() => {
+    return initialLocal.transactions || [];
+  });
+
+  const [notificationPreferences, setNotificationPreferences] = useState<NotificationPreferences>(() => {
+    return (
+      initialLocal.notificationPreferences || {
+        enabled: true,
+        morningEnabled: true,
+        morningTime: '09:00',
+        eveningEnabled: true,
+        eveningTime: '20:00',
+        soundEnabled: true,
+      }
+    );
+  });
+
   // Persistent Gemini Assistant suggestion dismissal (for the day or at least 4 hours)
   const [geminiSuggestionDismissedUntil, setGeminiSuggestionDismissedUntil] = useState<number | null>(() => {
     return localGet<number | null>(`${CANONICAL_STORAGE_KEY}_ai_dismissed_until`, null);
@@ -250,6 +279,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes,
     shoppingList,
     projects,
+    transactions,
+    notificationPreferences,
     geminiSuggestionDismissedUntil,
   });
 
@@ -268,6 +299,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes,
       shoppingList,
       projects,
+      transactions,
+      notificationPreferences,
       geminiSuggestionDismissedUntil,
     };
   }, [
@@ -284,6 +317,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes,
     shoppingList,
     projects,
+    transactions,
+    notificationPreferences,
     geminiSuggestionDismissedUntil,
   ]);
 
@@ -313,6 +348,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (reconciled.notes) setNotes(reconciled.notes);
         if (reconciled.shoppingList) setShoppingList(reconciled.shoppingList);
         if (reconciled.projects) setProjects(reconciled.projects);
+        if (reconciled.transactions) setTransactions(reconciled.transactions);
+        if (reconciled.notificationPreferences) {
+          setNotificationPreferences(reconciled.notificationPreferences);
+        }
         if (reconciled.geminiSuggestionDismissedUntil !== undefined) {
           setGeminiSuggestionDismissedUntil(reconciled.geminiSuggestionDismissedUntil);
         }
@@ -347,6 +386,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes,
       shoppingList,
       projects,
+      transactions,
+      notificationPreferences,
       geminiSuggestionDismissedUntil,
     });
   }, [
@@ -364,6 +405,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     notes,
     shoppingList,
     projects,
+    transactions,
+    notificationPreferences,
     geminiSuggestionDismissedUntil,
   ]);
 
@@ -645,6 +688,37 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setTasks(prev => prev.map(t => (t.id === id ? { ...t, ...updates } : t)));
   };
 
+  // Transaction methods (Manual Money Management)
+  const addTransaction = (txData: Omit<TransactionItem, 'id' | 'createdAt'>) => {
+    const newTx: TransactionItem = {
+      ...txData,
+      id: `tx-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      createdAt: new Date().toISOString(),
+    };
+    setTransactions(prev => [newTx, ...prev]);
+  };
+
+  const updateTransaction = (id: string, updates: Partial<TransactionItem>) => {
+    setTransactions(prev => prev.map(tx => (tx.id === id ? { ...tx, ...updates } : tx)));
+  };
+
+  const deleteTransaction = (id: string) => {
+    setTransactions(prev => prev.filter(tx => tx.id !== id));
+  };
+
+  // Notification Preferences methods
+  const updateNotificationPreferences = (prefs: Partial<NotificationPreferences>) => {
+    setNotificationPreferences(prev => {
+      const updated = { ...prev, ...prefs };
+      localSet(`${CANONICAL_STORAGE_KEY}_notifications`, updated);
+      idbSet('root_state', {
+        ...stateRef.current,
+        notificationPreferences: updated,
+      });
+      return updated;
+    });
+  };
+
   // Notes methods
   const addNote = (content: string, tags: string[] = ['#Note']) => {
     const newNote: QuickNote = {
@@ -872,6 +946,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       notes,
       shopping: shoppingList,
       projects,
+      transactions,
+      notifications: notificationPreferences,
     };
   };
 
@@ -889,6 +965,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (backup.notes) setNotes(backup.notes);
       if (backup.shopping) setShoppingList(backup.shopping);
       if (backup.projects) setProjects(backup.projects);
+      if (backup.transactions) setTransactions(backup.transactions);
+      if (backup.notifications) setNotificationPreferences(backup.notifications);
 
       persistFullState({
         preferences: backup.preferences || preferences,
@@ -904,6 +982,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         notes: backup.notes || notes,
         shoppingList: backup.shopping || shoppingList,
         projects: backup.projects || projects,
+        transactions: backup.transactions || transactions,
+        notificationPreferences: backup.notifications || notificationPreferences,
       });
 
       return true;
@@ -922,6 +1002,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setNotes([]);
     setShoppingList([]);
     setProjects([]);
+    setTransactions([]);
     setGymGoal(4);
     setGymLogs({});
     setWorkoutPlans([DEFAULT_GYM_PLAN]);
@@ -935,6 +1016,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_notes`);
       localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_shopping`);
       localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_projects`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_transactions`);
+      localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_notifications`);
       localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_gym_logs`);
       localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_gym_goal`);
       localStorage.removeItem(`${CANONICAL_STORAGE_KEY}_workout_plans`);
@@ -1001,6 +1084,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         restoreTask,
         carryForwardTask,
         editTask,
+        transactions,
+        addTransaction,
+        updateTransaction,
+        deleteTransaction,
+        notificationPreferences,
+        updateNotificationPreferences,
         isProductivityCalendarOpen,
         setIsProductivityCalendarOpen,
         selectedCalendarDate,

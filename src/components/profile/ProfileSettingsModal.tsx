@@ -2,6 +2,12 @@ import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import { AppSection } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { triggerHaptic } from '../../utils/haptics';
+import {
+  requestNotificationPermission,
+  displaySystemNotification,
+  getMotivationalMessage,
+} from '../../services/notificationService';
 
 export const ProfileSettingsModal: React.FC = () => {
   const {
@@ -13,12 +19,15 @@ export const ProfileSettingsModal: React.FC = () => {
     exportBackup,
     importBackup,
     resetAllData,
+    notificationPreferences,
+    updateNotificationPreferences,
   } = useApp();
 
   const [nameInput, setNameInput] = useState(preferences.name);
   const [gymTarget, setGymTarget] = useState(preferences.weeklyGymTarget || 4);
   const [saveNotice, setSaveNotice] = useState('');
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [testNotificationFeedback, setTestNotificationFeedback] = useState<string>('');
 
   // Active sections state
   const [enabledSections, setEnabledSections] = useState<AppSection[]>(
@@ -29,8 +38,8 @@ export const ProfileSettingsModal: React.FC = () => {
 
   const toggleSection = (sec: AppSection) => {
     if (sec === 'home') return; // Home remains always active
-    setEnabledSections(prev =>
-      prev.includes(sec) ? prev.filter(s => s !== sec) : [...prev, sec]
+    setEnabledSections((prev: AppSection[]) =>
+      prev.includes(sec) ? prev.filter((s: AppSection) => s !== sec) : [...prev, sec]
     );
   };
 
@@ -209,6 +218,167 @@ export const ProfileSettingsModal: React.FC = () => {
             Save Changes
           </button>
         </form>
+
+        {/* Motivational System Notifications */}
+        <div className="bg-[#090f19] p-4 rounded-2xl border border-[#202c3d]/40 space-y-3.5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-2">
+              <span className="material-symbols-outlined text-[#35d9ff] text-[18px]">
+                notifications_active
+              </span>
+              <span className="font-mono text-xs text-[#35d9ff] uppercase font-semibold">
+                Daily System Notifications
+              </span>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                triggerHaptic('light');
+                updateNotificationPreferences({
+                  enabled: !notificationPreferences.enabled,
+                });
+              }}
+              className={`w-11 h-6 rounded-full transition-colors relative p-0.5 ${
+                notificationPreferences.enabled ? 'bg-[#35d9ff]' : 'bg-[#1f314c]'
+              }`}
+            >
+              <div
+                className={`w-5 h-5 rounded-full bg-[#070b12] transition-transform ${
+                  notificationPreferences.enabled ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+          </div>
+
+          <p className="text-xs text-[#91a2b8] leading-relaxed">
+            Sends 2 energetic, witty motivational reminders directly to your device notification bar each day.
+          </p>
+
+          {notificationPreferences.enabled && (
+            <div className="space-y-3 pt-1 border-t border-[#202c3d]/30 font-mono text-xs">
+              {/* Morning Notification Schedule */}
+              <div className="flex items-center justify-between p-2 rounded-xl bg-[#0c1320] border border-[#202c3d]/40">
+                <div className="flex items-center space-x-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      updateNotificationPreferences({
+                        morningEnabled: !notificationPreferences.morningEnabled,
+                      });
+                    }}
+                    className={`w-4 h-4 rounded flex items-center justify-center border ${
+                      notificationPreferences.morningEnabled
+                        ? 'bg-[#35d9ff] border-[#35d9ff] text-[#003641]'
+                        : 'border-[#91a2b8] text-transparent'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[13px] font-bold">check</span>
+                  </button>
+                  <div>
+                    <span className="text-[#edf5ff] block font-sans text-xs">Morning Kickstart</span>
+                    <span className="text-[10px] text-[#91a2b8]">Motivational wake-up prompt</span>
+                  </div>
+                </div>
+
+                <input
+                  type="time"
+                  value={notificationPreferences.morningTime || '09:00'}
+                  onChange={e => {
+                    updateNotificationPreferences({ morningTime: e.target.value });
+                  }}
+                  className="bg-[#162338] border border-[#202c3d] rounded-lg px-2 py-1 text-xs text-[#35d9ff] focus:outline-none focus:border-[#35d9ff]"
+                />
+              </div>
+
+              {/* Evening Notification Schedule */}
+              <div className="flex items-center justify-between p-2 rounded-xl bg-[#0c1320] border border-[#202c3d]/40">
+                <div className="flex items-center space-x-2.5">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      updateNotificationPreferences({
+                        eveningEnabled: !notificationPreferences.eveningEnabled,
+                      });
+                    }}
+                    className={`w-4 h-4 rounded flex items-center justify-center border ${
+                      notificationPreferences.eveningEnabled
+                        ? 'bg-[#35d9ff] border-[#35d9ff] text-[#003641]'
+                        : 'border-[#91a2b8] text-transparent'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[13px] font-bold">check</span>
+                  </button>
+                  <div>
+                    <span className="text-[#edf5ff] block font-sans text-xs">Evening Debrief</span>
+                    <span className="text-[10px] text-[#91a2b8]">Wrap-up & daily focus check</span>
+                  </div>
+                </div>
+
+                <input
+                  type="time"
+                  value={notificationPreferences.eveningTime || '20:00'}
+                  onChange={e => {
+                    updateNotificationPreferences({ eveningTime: e.target.value });
+                  }}
+                  className="bg-[#162338] border border-[#202c3d] rounded-lg px-2 py-1 text-xs text-[#35d9ff] focus:outline-none focus:border-[#35d9ff]"
+                />
+              </div>
+
+              {/* Sound toggle & Test Button */}
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('light');
+                    updateNotificationPreferences({
+                      soundEnabled: !notificationPreferences.soundEnabled,
+                    });
+                  }}
+                  className="flex items-center space-x-1.5 text-[11px] text-[#91a2b8] hover:text-[#edf5ff]"
+                >
+                  <span className="material-symbols-outlined text-[16px] text-[#35d9ff]">
+                    {notificationPreferences.soundEnabled ? 'volume_up' : 'volume_off'}
+                  </span>
+                  <span>Alert Sound: {notificationPreferences.soundEnabled ? 'Enabled' : 'Muted'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    triggerHaptic('selection');
+                    const perm = await requestNotificationPermission();
+                    if (perm === 'granted') {
+                      const msg = getMotivationalMessage(new Date().getHours() < 13 ? 'morning' : 'evening');
+                      displaySystemNotification('Aetheris OS Motivation ⚡', msg);
+                      setTestNotificationFeedback('Test alert dispatched to system notification bar!');
+                    } else if (perm === 'denied') {
+                      setTestNotificationFeedback('Permission blocked in browser settings. Please allow notifications.');
+                    } else {
+                      setTestNotificationFeedback('Notification permission dismissed.');
+                    }
+                    setTimeout(() => setTestNotificationFeedback(''), 4000);
+                  }}
+                  className="px-3 py-1.5 rounded-lg bg-[#35d9ff]/15 hover:bg-[#35d9ff]/25 text-[#35d9ff] border border-[#35d9ff]/30 text-xs font-mono active:scale-95 transition-all"
+                >
+                  Send Test Notification
+                </button>
+              </div>
+
+              {testNotificationFeedback && (
+                <p className="text-[10px] text-[#5cffb7] font-mono text-center pt-1 animate-pulse">
+                  {testNotificationFeedback}
+                </p>
+              )}
+
+              <p className="text-[10px] text-[#91a2b8]/70 italic pt-1 leading-normal font-sans">
+                Note: Android delivers notifications directly. On iPhone, notifications require adding the web app to your Home Screen (iOS 16.4+).
+              </p>
+            </div>
+          )}
+        </div>
 
         {/* Data Reliability & Local Backup Tools */}
         <div className="bg-[#090f19] p-4 rounded-2xl border border-[#202c3d]/40 space-y-3">

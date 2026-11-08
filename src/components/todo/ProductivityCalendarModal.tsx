@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { useApp, getLocalDateString } from '../../context/AppContext';
 import { calculateDayProductivity, DayProductivity } from '../../utils/productivity';
 import { motion, AnimatePresence } from 'motion/react';
+import { triggerHaptic } from '../../utils/haptics';
 
 interface ProductivityCalendarModalProps {
   isOpen: boolean;
@@ -14,10 +15,12 @@ export const ProductivityCalendarModal: React.FC<ProductivityCalendarModalProps>
 }) => {
   const {
     tasks,
+    toggleTask,
     students,
     attendance,
     payments,
     salahRecords,
+    togglePrayer,
     gymLogs,
     selectedCalendarDate,
     setSelectedCalendarDate,
@@ -480,27 +483,61 @@ export const ProductivityCalendarModal: React.FC<ProductivityCalendarModalProps>
                       return (
                         <div
                           key={task.id}
-                          className="flex items-center justify-between p-2.5 rounded-xl bg-[#0c1320] border border-[#202c3d]/40 text-xs"
+                          className={`flex items-center justify-between p-2.5 rounded-xl border text-xs transition-colors ${
+                            task.completed
+                              ? 'bg-[#0c1320]/70 border-[#5cffb7]/30'
+                              : 'bg-[#0c1320] border-[#202c3d]/50'
+                          }`}
                         >
                           <div className="flex items-center space-x-2.5 min-w-0 flex-1 pr-2">
-                            <span
-                              className={`material-symbols-outlined text-[16px] shrink-0 ${
-                                task.completed ? 'text-[#5cffb7]' : 'text-[#91a2b8]'
-                              }`}
+                            {/* Interactive Checkbox for Historical Tasks */}
+                            <button
+                              type="button"
+                              onClick={() => {
+                                toggleTask(task.id);
+                                triggerHaptic('selection');
+                              }}
+                              className="p-1 -m-1 rounded-md hover:bg-[#162338] transition-colors shrink-0"
+                              aria-label={task.completed ? 'Mark incomplete' : 'Mark completed'}
+                              title={task.completed ? 'Click to mark incomplete' : 'Click to complete historical task'}
                             >
-                              {task.completed ? 'check_circle' : 'radio_button_unchecked'}
-                            </span>
-                            <div className="min-w-0 flex-1">
+                              <div
+                                className={`w-5 h-5 rounded-md flex items-center justify-center transition-all ${
+                                  task.completed
+                                    ? 'bg-[#5cffb7] text-[#003822] shadow-[0_0_8px_rgba(92,255,183,0.4)]'
+                                    : 'bg-[#162338] text-transparent hover:bg-[#1f314c] border border-[#202c3d]'
+                                }`}
+                              >
+                                <span className="material-symbols-outlined text-[15px] font-bold">
+                                  check
+                                </span>
+                              </div>
+                            </button>
+
+                            <div
+                              onClick={() => {
+                                toggleTask(task.id);
+                                triggerHaptic('selection');
+                              }}
+                              className="min-w-0 flex-1 cursor-pointer"
+                            >
                               <p
-                                className={`truncate font-medium ${
+                                className={`truncate font-medium transition-colors ${
                                   task.completed ? 'line-through text-[#91a2b8]' : 'text-[#edf5ff]'
                                 }`}
                               >
                                 {task.title}
                               </p>
                               <div className="flex items-center space-x-2 font-mono text-[10px] text-[#91a2b8] mt-0.5">
-                                <span>{task.category}</span>
-                                {task.dueTime && <span>• {task.dueTime}</span>}
+                                {task.completed ? (
+                                  <span className="text-[#5cffb7] font-semibold">
+                                    Completed {task.completedAt ? (task.completedAt.includes('T') ? new Date(task.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : task.completedAt) : 'done'}
+                                  </span>
+                                ) : task.dueTime ? (
+                                  <span>Due {task.dueTime}</span>
+                                ) : (
+                                  <span>Assigned {task.dueDate || selectedCalendarDate}</span>
+                                )}
                               </div>
                             </div>
                           </div>
@@ -509,7 +546,10 @@ export const ProductivityCalendarModal: React.FC<ProductivityCalendarModalProps>
                           {isUnfinishedPast && (
                             <button
                               type="button"
-                              onClick={() => handleCarryForward(task.id, task.title)}
+                              onClick={() => {
+                                handleCarryForward(task.id, task.title);
+                                triggerHaptic('success');
+                              }}
                               className="inline-flex items-center space-x-1 px-2.5 py-1 rounded-lg bg-[#35d9ff]/15 hover:bg-[#35d9ff]/25 text-[#35d9ff] border border-[#35d9ff]/30 text-[11px] font-mono shrink-0 active:scale-95 transition-all"
                               title="Carry forward to today's task list"
                             >
@@ -636,13 +676,19 @@ export const ProductivityCalendarModal: React.FC<ProductivityCalendarModalProps>
                   ).map(prayer => {
                     const isOffered = Boolean(selectedDaySalah[prayer.key]);
                     return (
-                      <div
+                      <button
                         key={prayer.key}
-                        className={`p-2 rounded-xl text-center border flex flex-col items-center justify-center space-y-1 transition-all ${
+                        type="button"
+                        onClick={() => {
+                          togglePrayer(prayer.key, selectedCalendarDate);
+                          triggerHaptic('selection');
+                        }}
+                        className={`p-2 rounded-xl text-center border flex flex-col items-center justify-center space-y-1 transition-all active:scale-95 ${
                           isOffered
                             ? 'bg-[#5cffb7] text-[#003822] border-[#5cffb7] shadow-[0_0_10px_rgba(92,255,183,0.35)]'
-                            : 'bg-[#0c1320] border-[#202c3d]/30 text-[#91a2b8]'
+                            : 'bg-[#0c1320] border-[#202c3d]/30 text-[#91a2b8] hover:border-[#5cffb7]/40'
                         }`}
+                        title={`Click to mark ${prayer.label} for ${selectedCalendarDate}`}
                       >
                         <span className={`material-symbols-outlined text-[15px] ${isOffered ? 'text-[#003822] font-bold' : 'text-[#91a2b8]/60'}`}>
                           {isOffered ? 'check_circle' : 'radio_button_unchecked'}
@@ -650,7 +696,7 @@ export const ProductivityCalendarModal: React.FC<ProductivityCalendarModalProps>
                         <span className={`font-mono text-[10px] font-semibold ${isOffered ? 'text-[#003822] font-bold' : 'text-[#91a2b8]'}`}>
                           {prayer.label}
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>

@@ -1,681 +1,667 @@
 import React, { useState, useMemo } from 'react';
 import { useApp, getLocalDateString } from '../../context/AppContext';
-import { Student, TuitionPayment } from '../../types';
+import { TransactionItem, TransactionType } from '../../types';
 import { motion, AnimatePresence } from 'motion/react';
+import { triggerHaptic } from '../../utils/haptics';
 
 export const MoneyManagementScreen: React.FC = () => {
-  const { students, payments, addPayment, deletePayment } = useApp();
+  const {
+    transactions,
+    addTransaction,
+    updateTransaction,
+    deleteTransaction,
+    students,
+    payments,
+  } = useApp();
 
-  const [graphRange, setGraphRange] = useState<'6m' | '12m'>('6m');
-  const [selectedMonthIndex, setSelectedMonthIndex] = useState<number | null>(null);
-  const [selectedStudentForPayment, setSelectedStudentForPayment] = useState<Student | null>(null);
+  // Active filter tab: 'all' | 'income' | 'expense'
+  const [filterType, setFilterType] = useState<'all' | 'income' | 'expense'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Payment Form States
-  const [payAmount, setPayAmount] = useState<string>('');
-  const [payDate, setPayDate] = useState<string>(getLocalDateString());
-  const [payMethod, setPayMethod] = useState<string>('bKash');
-  const [payNotes, setPayNotes] = useState<string>('');
-  const [paymentSuccessToast, setPaymentSuccessToast] = useState<string>('');
+  // Add / Edit Transaction Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingTx, setEditingTx] = useState<TransactionItem | null>(null);
 
-  // Current Date reference
+  const [txType, setTxType] = useState<TransactionType>('income');
+  const [txAmount, setTxAmount] = useState<string>('');
+  const [txCategory, setTxCategory] = useState<string>('Tuition Received');
+  const [txDate, setTxDate] = useState<string>(getLocalDateString());
+  const [txDescription, setTxDescription] = useState<string>('');
+  const [txPaymentMethod, setTxPaymentMethod] = useState<string>('bKash');
+
+  // Delete undo state
+  const [deletedTxNotice, setDeletedTxNotice] = useState<TransactionItem | null>(null);
+
+  // Common preset categories
+  const INCOME_CATEGORIES = ['Tuition Received', 'Freelance', 'Salary', 'Allowance', 'Gift', 'Other Income'];
+  const EXPENSE_CATEGORIES = ['Food & Dining', 'Transportation', 'Books & Study', 'Shopping', 'Gym & Fitness', 'Utilities', 'Other Expense'];
+
+  // Current month reference
   const now = new Date();
-  const currentMonthName = now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
+  const currentMonthStr = now.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }).toUpperCase();
 
-  // 1. Calculate Total Received & Still to Collect
-  // Total Received is the sum of payments recorded this month
-  const currentMonthStr = now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }); // e.g. "October 2026"
+  // Financial calculations from saved manual transactions
+  const totalIncome = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+  }, [transactions]);
 
-  const totalReceivedThisMonth = useMemo(() => {
-    return payments
-      .filter(p => p.month === currentMonthStr || p.paymentDate.startsWith(getLocalDateString().substring(0, 7)))
-      .reduce((sum, p) => sum + p.amount, 0);
-  }, [payments, currentMonthStr]);
+  const totalExpense = useMemo(() => {
+    return transactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+  }, [transactions]);
 
-  // Total Still to Collect is the sum of due amounts for active students
-  const totalStillToCollect = useMemo(() => {
-    return students.reduce((sum, s) => {
-      // Calculate dues directly from student.monthlyFee - total payments this month for this student
-      const studentPaidThisMonth = payments
-        .filter(p => p.studentId === s.id && (p.month === currentMonthStr || p.paymentDate.startsWith(getLocalDateString().substring(0, 7))))
-        .reduce((acc, p) => acc + p.amount, 0);
-      const remaining = Math.max(0, s.monthlyFee - studentPaidThisMonth);
-      return sum + remaining;
-    }, 0);
-  }, [students, payments, currentMonthStr]);
+  const balance = totalIncome - totalExpense;
 
-  const totalExpectedIncome = totalReceivedThisMonth + totalStillToCollect;
-  const collectionRate = totalExpectedIncome > 0 ? Math.round((totalReceivedThisMonth / totalExpectedIncome) * 100) : 100;
-
-  // 2. Build Income Graph Data for 6M / 12M
-  const graphMonths = useMemo(() => {
-    const monthCount = graphRange === '6m' ? 6 : 12;
-    const list = [];
-
-    for (let i = monthCount - 1; i >= 0; i--) {
-      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
-      const mStr = d.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-      const shortLabel = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
-      const yearMonthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-
-      // Sum all payments in this month
-      const monthPayments = payments.filter(
-        p => p.month === mStr || p.paymentDate.startsWith(yearMonthPrefix)
-      );
-      const totalAmount = monthPayments.reduce((sum, p) => sum + p.amount, 0);
-
-      list.push({
-        label: shortLabel,
-        fullMonth: mStr,
-        yearMonth: yearMonthPrefix,
-        total: totalAmount,
-        payments: monthPayments,
-      });
-    }
-
-    return list;
-  }, [payments, graphRange, now]);
-
-  // Max value in graph for proportional height scaling
-  const maxMonthlyIncome = useMemo(() => {
-    const maxVal = Math.max(...graphMonths.map(m => m.total), 10000);
-    return maxVal;
-  }, [graphMonths]);
-
-  // Selected month data for summary breakdown
-  const activeMonthData = selectedMonthIndex !== null && graphMonths[selectedMonthIndex]
-    ? graphMonths[selectedMonthIndex]
-    : graphMonths[graphMonths.length - 1]; // Default to latest month
-
-  // 3. Students with unpaid fees list
-  const unpaidStudents = useMemo(() => {
-    return students
-      .map(student => {
-        const studentPaid = payments
-          .filter(p => p.studentId === student.id && (p.month === currentMonthStr || p.paymentDate.startsWith(getLocalDateString().substring(0, 7))))
-          .reduce((acc, p) => acc + p.amount, 0);
-        const remaining = Math.max(0, student.monthlyFee - studentPaid);
-        return {
-          ...student,
-          paidThisMonth: studentPaid,
-          dueThisMonth: remaining,
-        };
+  // Filtered transactions list
+  const filteredTransactions = useMemo(() => {
+    return transactions
+      .filter(t => {
+        if (filterType !== 'all' && t.type !== filterType) return false;
+        if (searchQuery.trim()) {
+          const q = searchQuery.toLowerCase();
+          const matchCat = t.category.toLowerCase().includes(q);
+          const matchDesc = t.description?.toLowerCase().includes(q);
+          const matchMethod = t.paymentMethod?.toLowerCase().includes(q);
+          return matchCat || matchDesc || matchMethod;
+        }
+        return true;
       })
-      .filter(s => s.dueThisMonth > 0);
-  }, [students, payments, currentMonthStr]);
+      .sort((a, b) => (b.date > a.date ? 1 : b.date < a.date ? -1 : 0));
+  }, [transactions, filterType, searchQuery]);
 
-  // Handle Recording a Payment
-  const handleRecordPayment = (e: React.FormEvent) => {
+  // Open modal for new transaction
+  const handleOpenAdd = (type: TransactionType = 'income') => {
+    triggerHaptic('light');
+    setEditingTx(null);
+    setTxType(type);
+    setTxAmount('');
+    setTxCategory(type === 'income' ? 'Tuition Received' : 'Food & Dining');
+    setTxDate(getLocalDateString());
+    setTxDescription('');
+    setTxPaymentMethod('bKash');
+    setIsModalOpen(true);
+  };
+
+  // Open modal for editing
+  const handleOpenEdit = (tx: TransactionItem) => {
+    triggerHaptic('light');
+    setEditingTx(tx);
+    setTxType(tx.type);
+    setTxAmount(String(tx.amount));
+    setTxCategory(tx.category);
+    setTxDate(tx.date);
+    setTxDescription(tx.description || '');
+    setTxPaymentMethod(tx.paymentMethod || 'bKash');
+    setIsModalOpen(true);
+  };
+
+  // Submit Add or Edit
+  const handleSubmitTransaction = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedStudentForPayment) return;
-
-    const amountNum = Number(payAmount);
+    const amountNum = Number(txAmount);
     if (!amountNum || amountNum <= 0) return;
 
-    // Student's remaining due before this payment
-    const studentPaidBefore = payments
-      .filter(p => p.studentId === selectedStudentForPayment.id && (p.month === currentMonthStr || p.paymentDate.startsWith(getLocalDateString().substring(0, 7))))
-      .reduce((acc, p) => acc + p.amount, 0);
-    const dueBefore = Math.max(0, selectedStudentForPayment.monthlyFee - studentPaidBefore);
+    if (editingTx) {
+      updateTransaction(editingTx.id, {
+        type: txType,
+        amount: amountNum,
+        category: txCategory.trim() || (txType === 'income' ? 'Income' : 'Expense'),
+        date: txDate || getLocalDateString(),
+        description: txDescription.trim() || undefined,
+        paymentMethod: txPaymentMethod,
+      });
+      triggerHaptic('success');
+    } else {
+      addTransaction({
+        type: txType,
+        amount: amountNum,
+        category: txCategory.trim() || (txType === 'income' ? 'Income' : 'Expense'),
+        date: txDate || getLocalDateString(),
+        description: txDescription.trim() || undefined,
+        paymentMethod: txPaymentMethod,
+      });
+      triggerHaptic('success');
+    }
 
-    const isFull = amountNum >= dueBefore;
+    setIsModalOpen(false);
+  };
 
-    addPayment({
-      studentId: selectedStudentForPayment.id,
-      studentName: selectedStudentForPayment.name,
-      amount: amountNum,
-      paymentDate: payDate || getLocalDateString(),
-      month: currentMonthStr,
-      status: isFull ? 'Paid' : 'Partial',
-      method: payMethod,
-      notes: payNotes.trim() || undefined,
+  // Delete transaction with undo
+  const handleDeleteTx = (tx: TransactionItem) => {
+    triggerHaptic('warning');
+    deleteTransaction(tx.id);
+    setDeletedTxNotice(tx);
+    setTimeout(() => {
+      setDeletedTxNotice(null);
+    }, 4500);
+  };
+
+  const handleUndoDelete = () => {
+    if (deletedTxNotice) {
+      addTransaction({
+        type: deletedTxNotice.type,
+        amount: deletedTxNotice.amount,
+        category: deletedTxNotice.category,
+        date: deletedTxNotice.date,
+        description: deletedTxNotice.description,
+        paymentMethod: deletedTxNotice.paymentMethod,
+      });
+      setDeletedTxNotice(null);
+      triggerHaptic('success');
+    }
+  };
+
+  // Quick helper to record tuition payment into manual transactions if user chooses
+  const handleCopyTuitionAsTransaction = (studentName: string, amount: number) => {
+    addTransaction({
+      type: 'income',
+      amount,
+      category: 'Tuition Received',
+      date: getLocalDateString(),
+      description: `Tuition from ${studentName}`,
+      paymentMethod: 'bKash',
     });
-
-    setPaymentSuccessToast(`Recorded ৳${amountNum.toLocaleString()} from ${selectedStudentForPayment.name}`);
-    setTimeout(() => setPaymentSuccessToast(''), 3000);
-
-    setPayAmount('');
-    setPayNotes('');
-    setSelectedStudentForPayment(null);
+    triggerHaptic('success');
   };
 
   return (
     <main className="flex flex-col relative w-full px-4 pt-header-safe pb-32 bg-[#070b12] min-h-screen text-[#edf5ff]">
-      {/* Toast Notification */}
-      <AnimatePresence>
-        {paymentSuccessToast && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            className="fixed top-20 inset-x-4 z-50 max-w-sm mx-auto bg-[#05f292]/15 border border-[#05f292]/60 text-[#05f292] px-4 py-2.5 rounded-xl shadow-[0_0_16px_rgba(5,242,146,0.3)] flex items-center space-x-2 text-xs font-mono backdrop-blur-xl"
-          >
-            <span className="material-symbols-outlined text-[18px]">check_circle</span>
-            <span>{paymentSuccessToast}</span>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <div className="flex flex-col w-full space-y-5">
         {/* Top Header Telemetry */}
         <div className="flex items-center justify-between px-1">
           <div className="flex items-center space-x-2">
-            <span className="w-2 h-2 rounded-full bg-[#05f292] shadow-[0_0_8px_#05f292] animate-ping" />
+            <span className="w-2 h-2 rounded-full bg-[#35d9ff] shadow-[0_0_8px_#35d9ff]" />
             <span className="font-mono text-xs uppercase tracking-wider text-[#35d9ff]">
-              TUITION LEDGER // BDT
+              FINANCIAL LEDGER // BDT
             </span>
           </div>
 
           <span className="font-mono text-xs text-[#91a2b8]">
-            {currentMonthName}
+            {currentMonthStr}
           </span>
         </div>
 
-        {/* SECTION A: Total Received & Still to Collect Cards */}
-        <section className="grid grid-cols-2 gap-3">
-          {/* Total Received Card */}
-          <div className="relative rounded-2xl bg-[#0c1320] p-4 border border-[#202c3d]/60 shadow-lg overflow-hidden group hover:border-[#05f292]/40 transition-all">
-            <div className="absolute -top-10 -right-10 w-24 h-24 rounded-full bg-[#05f292]/10 blur-xl pointer-events-none" />
-            <div className="relative z-10 flex flex-col space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] text-[#91a2b8] uppercase tracking-wider font-semibold">
-                  Total Received
+        {/* 1. Main Net Balance Hero Card */}
+        <div className="relative rounded-3xl bg-[#0c1320] p-5 border border-[#202c3d]/70 shadow-2xl overflow-hidden">
+          <div className="absolute -top-12 -right-12 w-32 h-32 rounded-full bg-[#35d9ff]/10 blur-2xl pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-mono text-xs text-[#91a2b8] uppercase tracking-wider font-semibold">
+                Net Balance
+              </span>
+              <span
+                className={`font-mono text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                  balance >= 0
+                    ? 'bg-[#5cffb7]/15 text-[#5cffb7] border border-[#5cffb7]/30'
+                    : 'bg-[#ff5c78]/15 text-[#ff5c78] border border-[#ff5c78]/30'
+                }`}
+              >
+                {balance >= 0 ? 'Surplus' : 'Deficit'}
+              </span>
+            </div>
+
+            <div className="flex items-baseline space-x-1 font-mono">
+              <span className="text-xl font-semibold text-[#35d9ff]">৳</span>
+              <span
+                className={`text-3xl font-extrabold tracking-tight ${
+                  balance >= 0 ? 'text-[#edf5ff]' : 'text-[#ff5c78]'
+                }`}
+              >
+                {Math.abs(balance).toLocaleString()}
+              </span>
+              {balance < 0 && (
+                <span className="text-xs font-mono text-[#ff5c78] font-bold ml-1">
+                  (Negative)
                 </span>
-                <div className="w-6 h-6 rounded-lg bg-[#05f292]/15 text-[#05f292] flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[15px]">arrow_downward</span>
-                </div>
+              )}
+            </div>
+
+            {/* Income vs Expenses Bar */}
+            <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#202c3d]/40">
+              <div className="flex flex-col">
+                <span className="text-[10px] font-mono text-[#91a2b8] uppercase">Total Income</span>
+                <span className="text-sm font-bold font-mono text-[#5cffb7] mt-0.5">
+                  +৳{totalIncome.toLocaleString()}
+                </span>
               </div>
 
-              <div className="flex items-baseline space-x-1 font-mono pt-1">
-                <span className="text-sm font-semibold text-[#05f292]">৳</span>
-                <span className="text-2xl font-bold text-[#05f292] tracking-tight drop-shadow-[0_0_10px_rgba(5,242,146,0.25)]">
-                  {totalReceivedThisMonth.toLocaleString()}
-                </span>
-              </div>
-
-              <div className="flex items-center space-x-1.5 pt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#05f292]" />
-                <span className="font-mono text-[10px] text-[#91a2b8]">
-                  {collectionRate}% Collected
+              <div className="flex flex-col text-right">
+                <span className="text-[10px] font-mono text-[#91a2b8] uppercase">Total Expenses</span>
+                <span className="text-sm font-bold font-mono text-[#ff5c78] mt-0.5">
+                  -৳{totalExpense.toLocaleString()}
                 </span>
               </div>
             </div>
           </div>
+        </div>
 
-          {/* Still to Collect Card */}
-          <div className="relative rounded-2xl bg-[#0c1320] p-4 border border-[#202c3d]/60 shadow-lg overflow-hidden group hover:border-[#ff5370]/40 transition-all">
-            <div className="absolute -top-10 -right-10 w-24 h-24 rounded-full bg-[#ff5370]/10 blur-xl pointer-events-none" />
-            <div className="relative z-10 flex flex-col space-y-1.5">
-              <div className="flex items-center justify-between">
-                <span className="font-mono text-[10px] text-[#91a2b8] uppercase tracking-wider font-semibold">
-                  Still to Collect
-                </span>
-                <div className="w-6 h-6 rounded-lg bg-[#ff5370]/15 text-[#ff5370] flex items-center justify-center">
-                  <span className="material-symbols-outlined text-[15px]">schedule</span>
-                </div>
-              </div>
+        {/* 2. Primary Action Bar: + Add Transaction Button */}
+        <div className="grid grid-cols-2 gap-2.5">
+          <button
+            type="button"
+            onClick={() => handleOpenAdd('income')}
+            className="py-3 px-4 rounded-2xl bg-gradient-to-r from-[#05f292]/20 to-[#35d9ff]/20 border border-[#5cffb7]/40 text-[#5cffb7] font-mono text-xs font-bold shadow-md hover:bg-[#5cffb7]/25 active:scale-95 transition-all flex items-center justify-center space-x-2"
+          >
+            <span className="material-symbols-outlined text-[18px]">add_circle</span>
+            <span>+ Add Income</span>
+          </button>
 
-              <div className="flex items-baseline space-x-1 font-mono pt-1">
-                <span className="text-sm font-semibold text-[#ff5370]">৳</span>
-                <span className="text-2xl font-bold text-[#ff5370] tracking-tight drop-shadow-[0_0_10px_rgba(255,83,112,0.25)]">
-                  {totalStillToCollect.toLocaleString()}
-                </span>
-              </div>
+          <button
+            type="button"
+            onClick={() => handleOpenAdd('expense')}
+            className="py-3 px-4 rounded-2xl bg-gradient-to-r from-[#ff5c78]/20 to-[#ff9800]/20 border border-[#ff5c78]/40 text-[#ff5c78] font-mono text-xs font-bold shadow-md hover:bg-[#ff5c78]/25 active:scale-95 transition-all flex items-center justify-center space-x-2"
+          >
+            <span className="material-symbols-outlined text-[18px]">remove_circle</span>
+            <span>+ Add Expense</span>
+          </button>
+        </div>
 
-              <div className="flex items-center space-x-1.5 pt-0.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#ff5370]" />
-                <span className="font-mono text-[10px] text-[#91a2b8]">
-                  {unpaidStudents.length} Students Pending
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* SECTION B: Simple Income Graph */}
-        <section className="bg-[#0c1320] rounded-2xl p-4 border border-[#202c3d]/50 shadow-md space-y-3.5">
-          {/* Header & 6M / 12M Range Switcher */}
+        {/* 3. Filter Segment & Search */}
+        <div className="space-y-2.5">
           <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-semibold text-[#edf5ff]">Income Graph</h3>
-              <p className="font-mono text-[10px] text-[#91a2b8]">Tap a bar to inspect receipts</p>
-            </div>
-
-            <div className="bg-[#090f19] p-0.5 rounded-xl border border-[#202c3d]/40 flex items-center font-mono text-[11px]">
-              <button
-                type="button"
-                onClick={() => {
-                  setGraphRange('6m');
-                  setSelectedMonthIndex(null);
-                }}
-                className={`px-3 py-1 rounded-lg transition-all font-semibold ${
-                  graphRange === '6m'
-                    ? 'bg-[#35d9ff] text-[#003641] shadow-sm'
-                    : 'text-[#91a2b8] hover:text-[#edf5ff]'
-                }`}
-              >
-                6M
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setGraphRange('12m');
-                  setSelectedMonthIndex(null);
-                }}
-                className={`px-3 py-1 rounded-lg transition-all font-semibold ${
-                  graphRange === '12m'
-                    ? 'bg-[#35d9ff] text-[#003641] shadow-sm'
-                    : 'text-[#91a2b8] hover:text-[#edf5ff]'
-                }`}
-              >
-                12M
-              </button>
-            </div>
+            <h3 className="text-sm font-semibold text-[#edf5ff]">Transaction History</h3>
+            <span className="font-mono text-[10px] text-[#91a2b8]">
+              {filteredTransactions.length} recorded
+            </span>
           </div>
 
-          {/* Bar Chart Area */}
-          <div className="h-40 w-full pt-4 pb-1 flex items-end justify-between gap-2 border-b border-[#202c3d]/30">
-            {graphMonths.map((m, idx) => {
-              const isSelected = selectedMonthIndex === idx || (selectedMonthIndex === null && idx === graphMonths.length - 1);
-              const heightPct = Math.max(6, Math.min(100, Math.round((m.total / maxMonthlyIncome) * 100)));
-
-              return (
-                <div
-                  key={m.yearMonth}
-                  onClick={() => setSelectedMonthIndex(idx)}
-                  className="flex-1 flex flex-col items-center justify-end h-full group cursor-pointer"
+          <div className="flex items-center space-x-2">
+            <div className="flex-1 bg-[#090f19] p-1 rounded-xl flex items-center font-mono text-xs border border-[#202c3d]/40">
+              {(['all', 'income', 'expense'] as const).map(tab => (
+                <button
+                  key={tab}
+                  type="button"
+                  onClick={() => {
+                    triggerHaptic('light');
+                    setFilterType(tab);
+                  }}
+                  className={`flex-1 py-1.5 rounded-lg text-center font-semibold capitalize transition-all ${
+                    filterType === tab
+                      ? 'bg-[#35d9ff] text-[#003641] shadow-sm font-bold'
+                      : 'text-[#91a2b8] hover:text-[#edf5ff]'
+                  }`}
                 >
-                  {/* Amount tooltip on hover/select */}
-                  {isSelected && (
-                    <span className="font-mono text-[9px] text-[#05f292] font-semibold mb-1 whitespace-nowrap">
-                      ৳{m.total >= 1000 ? `${(m.total / 1000).toFixed(1)}k` : m.total}
-                    </span>
-                  )}
-
-                  {/* Visual Bar */}
-                  <div className="w-full max-w-[28px] h-full flex items-end">
-                    <div
-                      style={{ height: `${heightPct}%` }}
-                      className={`w-full rounded-t-md transition-all duration-300 ${
-                        isSelected
-                          ? 'bg-gradient-to-t from-[#05f292] to-[#35d9ff] shadow-[0_0_12px_rgba(5,242,146,0.35)]'
-                          : m.total > 0
-                          ? 'bg-[#1f314c] hover:bg-[#35d9ff]/50'
-                          : 'bg-[#162338]/40'
-                      }`}
-                    />
-                  </div>
-
-                  {/* Month Label */}
-                  <span
-                    className={`font-mono text-[9px] mt-2 ${
-                      isSelected ? 'text-[#35d9ff] font-bold' : 'text-[#91a2b8]'
-                    }`}
-                  >
-                    {m.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Month Summary Card (Shown when a month is selected) */}
-          {activeMonthData && (
-            <div className="bg-[#090f19] p-3 rounded-xl border border-[#202c3d]/40 flex items-center justify-between">
-              <div>
-                <span className="font-mono text-[10px] text-[#91a2b8] uppercase">
-                  {activeMonthData.fullMonth} Summary
-                </span>
-                <p className="font-mono text-sm font-bold text-[#edf5ff] mt-0.5">
-                  ৳{activeMonthData.total.toLocaleString()} Collected
-                </p>
-              </div>
-
-              <span className="font-mono text-[11px] text-[#35d9ff] px-2.5 py-1 rounded-full bg-[#162338] border border-[#202c3d]">
-                {activeMonthData.payments.length} Payments Recorded
-              </span>
-            </div>
-          )}
-        </section>
-
-        {/* SECTION C: Unpaid Fees List */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <div className="flex items-center space-x-2">
-              <h3 className="text-base font-semibold text-[#edf5ff]">Unpaid Fees</h3>
-              <span className="px-2 py-0.5 rounded-full bg-[#ff5370]/15 text-[#ff5370] font-mono text-[10px] font-semibold border border-[#ff5370]/30">
-                {unpaidStudents.length} Students
-              </span>
-            </div>
-            <span className="font-mono text-[10px] text-[#91a2b8]">Tap to record payment</span>
-          </div>
-
-          {unpaidStudents.length === 0 ? (
-            <div className="p-6 rounded-2xl bg-[#0c1320] border border-[#202c3d]/40 text-center space-y-2">
-              <div className="w-10 h-10 rounded-full bg-[#05f292]/15 text-[#05f292] mx-auto flex items-center justify-center">
-                <span className="material-symbols-outlined text-[22px]">check_circle</span>
-              </div>
-              <h4 className="text-sm font-semibold text-[#edf5ff]">All Fees Settled</h4>
-              <p className="text-xs text-[#91a2b8] max-w-xs mx-auto">
-                No students have outstanding tuition fees for this billing cycle.
-              </p>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {unpaidStudents.map(student => (
-                <div
-                  key={student.id}
-                  onClick={() => setSelectedStudentForPayment(student)}
-                  className="p-3.5 rounded-2xl bg-[#0c1320] border border-[#202c3d]/50 hover:border-[#35d9ff]/40 transition-all flex items-center justify-between cursor-pointer active:scale-[0.99]"
-                >
-                  <div className="flex items-center space-x-3 min-w-0 pr-2">
-                    <div className="w-10 h-10 rounded-xl bg-[#162338] border border-[#35d9ff]/30 text-[#35d9ff] font-mono font-bold text-xs flex items-center justify-center shrink-0">
-                      {student.initials}
-                    </div>
-
-                    <div className="min-w-0">
-                      <h4 className="text-xs font-semibold text-[#edf5ff] truncate">
-                        {student.name}
-                      </h4>
-                      <p className="font-mono text-[10px] text-[#91a2b8] truncate mt-0.5">
-                        {student.gradeOrClass} • Fee ৳{student.monthlyFee.toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Due amount badge */}
-                  <div className="flex flex-col items-end shrink-0">
-                    <span className="font-mono text-xs font-bold text-[#ff5370]">
-                      ৳{student.dueThisMonth.toLocaleString()} Due
-                    </span>
-                    {student.paidThisMonth > 0 && (
-                      <span className="font-mono text-[9px] text-[#05f292]">
-                        ৳{student.paidThisMonth.toLocaleString()} Paid
-                      </span>
-                    )}
-                  </div>
-                </div>
+                  {tab}
+                </button>
               ))}
             </div>
-          )}
-        </section>
 
-        {/* SECTION D: Recent Payment History Log */}
-        <section className="space-y-3 pt-2">
-          <div className="flex items-center justify-between px-1">
-            <h3 className="text-base font-semibold text-[#edf5ff]">Recent Payments</h3>
-            <span className="font-mono text-[10px] text-[#91a2b8]">All records</span>
+            <div className="w-1/3 bg-[#090f19] px-2.5 py-1.5 rounded-xl border border-[#202c3d]/40 flex items-center space-x-1">
+              <span className="material-symbols-outlined text-[#91a2b8] text-[16px]">search</span>
+              <input
+                type="text"
+                placeholder="Filter..."
+                value={searchQuery}
+                onChange={e => setSearchQuery(e.target.value)}
+                className="bg-transparent text-xs text-[#edf5ff] placeholder-[#91a2b8]/50 focus:outline-none w-full font-mono"
+              />
+            </div>
           </div>
+        </div>
 
-          {payments.length === 0 ? (
-            <div className="p-6 rounded-2xl bg-[#0c1320] border border-[#202c3d]/40 text-center space-y-1.5">
-              <p className="text-xs text-[#91a2b8]">No payments recorded yet.</p>
-              <p className="text-[11px] text-[#91a2b8]/70">
-                Tap on an unpaid student above to record full or partial tuition fees.
+        {/* 4. Transaction List */}
+        <div className="flex flex-col space-y-2">
+          {filteredTransactions.length === 0 ? (
+            <div className="p-8 rounded-2xl bg-[#0c1320] border border-[#202c3d]/40 text-center space-y-2">
+              <div className="w-10 h-10 rounded-full bg-[#162338] text-[#35d9ff] mx-auto flex items-center justify-center">
+                <span className="material-symbols-outlined text-[20px]">account_balance_wallet</span>
+              </div>
+              <h4 className="text-xs font-semibold text-[#edf5ff]">No Transactions Logged</h4>
+              <p className="text-[11px] text-[#91a2b8] max-w-xs mx-auto">
+                {filterType === 'all'
+                  ? 'Your manual ledger is ready. Tap "+ Add Income" or "+ Add Expense" to record a financial transaction.'
+                  : `No ${filterType} entries found matching your query.`}
               </p>
             </div>
           ) : (
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-0.5">
-              {payments.slice(0, 10).map(payment => {
-                const student = students.find(s => s.id === payment.studentId);
-                const sName = student?.name || payment.studentName || 'Student';
-
+            <AnimatePresence initial={false}>
+              {filteredTransactions.map(tx => {
+                const isIncome = tx.type === 'income';
                 return (
-                  <div
-                    key={payment.id}
-                    className="p-3 rounded-xl bg-[#0c1320] border border-[#202c3d]/40 flex items-center justify-between"
+                  <motion.div
+                    key={tx.id}
+                    layout
+                    initial={{ opacity: 0, y: 6 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                    transition={{ duration: 0.18 }}
+                    className="p-3.5 rounded-2xl bg-[#0c1320] border border-[#202c3d]/50 hover:border-[#35d9ff]/30 transition-all flex items-center justify-between group"
                   >
-                    <div className="flex items-center space-x-2.5 min-w-0 pr-2">
-                      <div className="w-8 h-8 rounded-lg bg-[#05f292]/15 text-[#05f292] flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-[16px]">receipt_long</span>
+                    <div className="flex items-center space-x-3 min-w-0 pr-2">
+                      <div
+                        className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                          isIncome
+                            ? 'bg-[#5cffb7]/15 text-[#5cffb7] border border-[#5cffb7]/30'
+                            : 'bg-[#ff5c78]/15 text-[#ff5c78] border border-[#ff5c78]/30'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[18px]">
+                          {isIncome ? 'arrow_downward' : 'arrow_upward'}
+                        </span>
                       </div>
+
                       <div className="min-w-0">
-                        <p className="text-xs font-medium text-[#edf5ff] truncate">{sName}</p>
-                        <p className="font-mono text-[10px] text-[#91a2b8] truncate">
-                          {payment.paymentDate} • {payment.method || 'bKash'}
-                          {payment.notes ? ` • ${payment.notes}` : ''}
+                        <div className="flex items-center space-x-2">
+                          <h4 className="text-xs font-semibold text-[#edf5ff] truncate">
+                            {tx.category}
+                          </h4>
+                          <span className="font-mono text-[9px] text-[#91a2b8] px-1.5 py-0.5 rounded bg-[#162338]">
+                            {tx.paymentMethod || 'Cash'}
+                          </span>
+                        </div>
+
+                        <p className="font-mono text-[10px] text-[#91a2b8] truncate mt-0.5">
+                          {tx.date}
+                          {tx.description ? ` • ${tx.description}` : ''}
                         </p>
                       </div>
                     </div>
 
                     <div className="flex items-center space-x-2 shrink-0">
-                      <span className="font-mono text-xs font-bold text-[#05f292]">
-                        +৳{payment.amount.toLocaleString()}
+                      <span
+                        className={`font-mono text-sm font-bold ${
+                          isIncome ? 'text-[#5cffb7]' : 'text-[#ff5c78]'
+                        }`}
+                      >
+                        {isIncome ? '+' : '-'}৳{tx.amount.toLocaleString()}
                       </span>
+
+                      {/* Edit & Delete Action Buttons */}
                       <button
                         type="button"
-                        onClick={() => {
-                          if (confirm(`Delete payment of ৳${payment.amount.toLocaleString()} for ${sName}?`)) {
-                            deletePayment(payment.id);
-                          }
-                        }}
-                        className="text-[#91a2b8] hover:text-[#ff5370] p-1 transition-colors"
-                        title="Delete receipt"
+                        onClick={() => handleOpenEdit(tx)}
+                        className="p-1 rounded-lg hover:bg-[#162338] text-[#91a2b8] hover:text-[#35d9ff] transition-colors"
+                        title="Edit transaction"
                       >
-                        <span className="material-symbols-outlined text-[15px]">delete</span>
+                        <span className="material-symbols-outlined text-[16px]">edit</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteTx(tx)}
+                        className="p-1 rounded-lg hover:bg-[#162338] text-[#91a2b8] hover:text-[#ff5c78] transition-colors"
+                        title="Delete transaction"
+                      >
+                        <span className="material-symbols-outlined text-[16px]">delete</span>
                       </button>
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
-            </div>
+            </AnimatePresence>
           )}
-        </section>
+        </div>
+
+        {/* 5. Tuition Reference Helper (Decoupled, manual reference only) */}
+        {students.length > 0 && (
+          <div className="pt-2">
+            <details className="group bg-[#090f19] rounded-2xl border border-[#202c3d]/40 p-3.5 transition-all">
+              <summary className="flex items-center justify-between cursor-pointer list-none">
+                <div className="flex items-center space-x-2 font-mono text-xs text-[#91a2b8]">
+                  <span className="material-symbols-outlined text-[#35d9ff] text-[16px]">
+                    school
+                  </span>
+                  <span className="text-[#edf5ff] font-semibold">Tuition Students Due Summary</span>
+                </div>
+                <span className="material-symbols-outlined text-[18px] text-[#91a2b8] group-open:rotate-180 transition-transform">
+                  expand_more
+                </span>
+              </summary>
+
+              <div className="pt-3 space-y-2">
+                <p className="text-[11px] text-[#91a2b8] leading-relaxed">
+                  Tuition tracking operates independently. If you receive fees and want them in your manual financial balance, tap "+ Record Income".
+                </p>
+                <div className="space-y-1.5">
+                  {students.map(s => (
+                    <div
+                      key={s.id}
+                      className="p-2 rounded-xl bg-[#0c1320] border border-[#202c3d]/30 flex items-center justify-between text-xs font-mono"
+                    >
+                      <div>
+                        <span className="text-[#edf5ff] font-medium">{s.name}</span>
+                        <span className="text-[#91a2b8] ml-2">Fee: ৳{s.monthlyFee.toLocaleString()}</span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyTuitionAsTransaction(s.name, s.monthlyFee)}
+                        className="px-2 py-1 rounded bg-[#162338] text-[#5cffb7] hover:bg-[#1f314c] text-[10px] border border-[#5cffb7]/30 transition-all active:scale-95"
+                      >
+                        + Log ৳{s.monthlyFee.toLocaleString()} Income
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </details>
+          </div>
+        )}
       </div>
 
-      {/* PAYMENT MODAL / PANEL */}
+      {/* Undo Snackbar on Delete */}
       <AnimatePresence>
-        {selectedStudentForPayment && (
-          <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center">
-            {/* Backdrop */}
+        {deletedTxNotice && (
+          <motion.div
+            initial={{ opacity: 0, y: 16 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 16 }}
+            transition={{ duration: 0.2 }}
+            className="fixed bottom-24 inset-x-4 z-40 max-w-sm mx-auto bg-[#0c1320] border border-[#ff5c78]/40 shadow-2xl rounded-2xl p-3 flex items-center justify-between backdrop-blur-xl"
+          >
+            <div className="flex items-center space-x-2 min-w-0 pr-2">
+              <span className="material-symbols-outlined text-[#ff5c78] text-[18px] shrink-0">
+                delete
+              </span>
+              <span className="text-xs text-[#edf5ff] truncate">
+                Deleted {deletedTxNotice.category} (৳{deletedTxNotice.amount.toLocaleString()})
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={handleUndoDelete}
+              className="px-3 py-1 bg-[#35d9ff] text-[#003641] font-mono font-bold text-xs rounded-xl active:scale-95 transition-all shrink-0 shadow-md"
+            >
+              Undo
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Add / Edit Transaction Modal */}
+      <AnimatePresence>
+        {isModalOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               className="absolute inset-0 bg-black/80 backdrop-blur-sm"
-              onClick={() => setSelectedStudentForPayment(null)}
+              onClick={() => setIsModalOpen(false)}
             />
 
-            {/* Modal Sheet */}
             <motion.div
-              initial={{ y: '100%' }}
-              animate={{ y: 0 }}
-              exit={{ y: '100%' }}
-              transition={{ type: 'spring', damping: 26, stiffness: 280 }}
-              className="relative z-10 w-full max-w-lg bg-[#0c1320] border-t sm:border border-[#202c3d]/60 rounded-t-3xl sm:rounded-3xl p-5 shadow-2xl max-h-[90vh] flex flex-col space-y-4 overflow-y-auto"
+              initial={{ opacity: 0, scale: 0.94 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.94 }}
+              transition={{ duration: 0.2 }}
+              className="relative z-10 w-full max-w-md bg-[#0c1320] border border-[#202c3d] rounded-3xl p-5 shadow-2xl flex flex-col space-y-4"
             >
-              <div className="w-12 h-1.5 bg-[#202c3d] rounded-full mx-auto" />
-
-              {/* Student Header */}
+              {/* Header */}
               <div className="flex items-center justify-between pb-2 border-b border-[#202c3d]/40">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 rounded-xl bg-[#162338] border border-[#35d9ff]/30 text-[#35d9ff] font-bold font-mono text-sm flex items-center justify-center">
-                    {selectedStudentForPayment.initials}
+                <div className="flex items-center space-x-2">
+                  <div
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                      txType === 'income' ? 'bg-[#5cffb7]/20 text-[#5cffb7]' : 'bg-[#ff5c78]/20 text-[#ff5c78]'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[18px]">
+                      {txType === 'income' ? 'add_card' : 'payments'}
+                    </span>
                   </div>
-                  <div>
-                    <h3 className="text-base font-semibold text-[#edf5ff]">
-                      {selectedStudentForPayment.name}
-                    </h3>
-                    <p className="font-mono text-xs text-[#91a2b8]">
-                      {selectedStudentForPayment.gradeOrClass} • {selectedStudentForPayment.phone || 'No phone'}
-                    </p>
-                  </div>
+                  <h3 className="text-base font-semibold text-[#edf5ff]">
+                    {editingTx ? 'Edit Transaction' : 'Record Transaction'}
+                  </h3>
                 </div>
 
                 <button
                   type="button"
-                  onClick={() => setSelectedStudentForPayment(null)}
-                  className="w-8 h-8 rounded-full bg-[#162338] flex items-center justify-center text-[#91a2b8] hover:text-[#edf5ff]"
+                  onClick={() => setIsModalOpen(false)}
+                  className="w-7 h-7 rounded-full bg-[#162338] text-[#91a2b8] hover:text-[#edf5ff] flex items-center justify-center"
                 >
-                  <span className="material-symbols-outlined text-[18px]">close</span>
+                  <span className="material-symbols-outlined text-[16px]">close</span>
                 </button>
               </div>
 
-              {/* Financial Status Pods */}
-              {(() => {
-                const studentPayments = payments.filter(p => p.studentId === selectedStudentForPayment.id);
-                const totalPaidAllTime = studentPayments.reduce((sum, p) => sum + p.amount, 0);
+              {/* Form */}
+              <form onSubmit={handleSubmitTransaction} className="space-y-3.5">
+                {/* Transaction Type Segment */}
+                <div className="bg-[#090f19] p-1 rounded-xl flex items-center font-mono text-xs border border-[#202c3d]">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setTxType('income');
+                      if (EXPENSE_CATEGORIES.includes(txCategory)) setTxCategory('Tuition Received');
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-center font-bold transition-all ${
+                      txType === 'income'
+                        ? 'bg-[#5cffb7] text-[#003822] shadow-sm'
+                        : 'text-[#91a2b8] hover:text-[#edf5ff]'
+                    }`}
+                  >
+                    Income (+)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      triggerHaptic('light');
+                      setTxType('expense');
+                      if (INCOME_CATEGORIES.includes(txCategory)) setTxCategory('Food & Dining');
+                    }}
+                    className={`flex-1 py-1.5 rounded-lg text-center font-bold transition-all ${
+                      txType === 'expense'
+                        ? 'bg-[#ff5c78] text-[#070b12] shadow-sm'
+                        : 'text-[#91a2b8] hover:text-[#edf5ff]'
+                    }`}
+                  >
+                    Expense (-)
+                  </button>
+                </div>
 
-                const studentPaidThisMonth = payments
-                  .filter(p => p.studentId === selectedStudentForPayment.id && (p.month === currentMonthStr || p.paymentDate.startsWith(getLocalDateString().substring(0, 7))))
-                  .reduce((acc, p) => acc + p.amount, 0);
-                const remainingDue = Math.max(0, selectedStudentForPayment.monthlyFee - studentPaidThisMonth);
+                {/* Amount */}
+                <div className="flex flex-col space-y-1">
+                  <label className="text-[10px] font-mono text-[#91a2b8]">AMOUNT (৳) *</label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-2.5 font-mono text-sm text-[#91a2b8]">৳</span>
+                    <input
+                      type="number"
+                      required
+                      min={1}
+                      autoFocus
+                      placeholder="e.g. 5000"
+                      value={txAmount}
+                      onChange={e => setTxAmount(e.target.value)}
+                      className="w-full bg-[#090f19] border border-[#202c3d] rounded-xl pl-8 pr-3 py-2 text-sm text-[#edf5ff] focus:outline-none focus:border-[#35d9ff] font-mono"
+                    />
+                  </div>
+                </div>
 
-                return (
-                  <>
-                    <div className="grid grid-cols-3 gap-2 font-mono text-center">
-                      <div className="p-2.5 rounded-xl bg-[#090f19] border border-[#202c3d]/40">
-                        <span className="text-[9px] text-[#91a2b8] block uppercase">Monthly Fee</span>
-                        <span className="text-xs font-bold text-[#edf5ff] mt-0.5 block">
-                          ৳{selectedStudentForPayment.monthlyFee.toLocaleString()}
-                        </span>
-                      </div>
+                {/* Category with Chips */}
+                <div className="flex flex-col space-y-1.5">
+                  <label className="text-[10px] font-mono text-[#91a2b8]">CATEGORY</label>
+                  <input
+                    type="text"
+                    required
+                    value={txCategory}
+                    onChange={e => setTxCategory(e.target.value)}
+                    placeholder="Enter or select category..."
+                    className="w-full bg-[#090f19] border border-[#202c3d] rounded-xl px-3 py-2 text-xs text-[#edf5ff] focus:outline-none focus:border-[#35d9ff]"
+                  />
 
-                      <div className="p-2.5 rounded-xl bg-[#090f19] border border-[#202c3d]/40">
-                        <span className="text-[9px] text-[#91a2b8] block uppercase">Total Received</span>
-                        <span className="text-xs font-bold text-[#05f292] mt-0.5 block">
-                          ৳{studentPaidThisMonth.toLocaleString()}
-                        </span>
-                      </div>
-
-                      <div className="p-2.5 rounded-xl bg-[#090f19] border border-[#202c3d]/40">
-                        <span className="text-[9px] text-[#91a2b8] block uppercase">Remaining Due</span>
-                        <span className="text-xs font-bold text-[#ff5370] mt-0.5 block">
-                          ৳{remainingDue.toLocaleString()}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Record Payment Form */}
-                    <form onSubmit={handleRecordPayment} className="bg-[#090f19] p-4 rounded-2xl border border-[#202c3d]/50 space-y-3">
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs text-[#35d9ff] font-semibold uppercase">
-                          Record New Payment
-                        </span>
-                        {remainingDue > 0 && (
-                          <div className="flex space-x-1 font-mono text-[10px]">
-                            <button
-                              type="button"
-                              onClick={() => setPayAmount(String(remainingDue))}
-                              className="px-2 py-0.5 rounded bg-[#162338] text-[#05f292] hover:bg-[#1f314c]"
-                            >
-                              Full (৳{remainingDue.toLocaleString()})
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setPayAmount(String(Math.round(remainingDue / 2)))}
-                              className="px-2 py-0.5 rounded bg-[#162338] text-[#35d9ff] hover:bg-[#1f314c]"
-                            >
-                              Half
-                            </button>
-                          </div>
-                        )}
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2.5">
-                        <div className="flex flex-col space-y-1">
-                          <label className="font-mono text-[10px] text-[#91a2b8]">AMOUNT (৳) *</label>
-                          <input
-                            type="number"
-                            required
-                            min={1}
-                            placeholder="e.g. 2000"
-                            value={payAmount}
-                            onChange={e => setPayAmount(e.target.value)}
-                            className="bg-[#0c1320] border border-[#202c3d] rounded-lg px-3 py-2 text-xs text-[#edf5ff] focus:outline-none focus:border-[#35d9ff]"
-                          />
-                        </div>
-
-                        <div className="flex flex-col space-y-1">
-                          <label className="font-mono text-[10px] text-[#91a2b8]">PAYMENT METHOD</label>
-                          <select
-                            value={payMethod}
-                            onChange={e => setPayMethod(e.target.value)}
-                            className="bg-[#0c1320] border border-[#202c3d] rounded-lg px-2.5 py-2 text-xs text-[#edf5ff] focus:outline-none focus:border-[#35d9ff]"
-                          >
-                            <option value="bKash">bKash</option>
-                            <option value="Nagad">Nagad</option>
-                            <option value="Cash">Cash</option>
-                            <option value="Bank Transfer">Bank Transfer</option>
-                            <option value="Rocket">Rocket</option>
-                          </select>
-                        </div>
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-2.5">
-                        <div className="flex flex-col space-y-1">
-                          <label className="font-mono text-[10px] text-[#91a2b8]">PAYMENT DATE</label>
-                          <input
-                            type="date"
-                            value={payDate}
-                            onChange={e => setPayDate(e.target.value)}
-                            className="bg-[#0c1320] border border-[#202c3d] rounded-lg px-3 py-1.5 text-xs text-[#edf5ff] focus:outline-none focus:border-[#35d9ff]"
-                          />
-                        </div>
-
-                        <div className="flex flex-col space-y-1">
-                          <label className="font-mono text-[10px] text-[#91a2b8]">NOTES (OPTIONAL)</label>
-                          <input
-                            type="text"
-                            placeholder="e.g. Trx ID or remarks"
-                            value={payNotes}
-                            onChange={e => setPayNotes(e.target.value)}
-                            className="bg-[#0c1320] border border-[#202c3d] rounded-lg px-3 py-1.5 text-xs text-[#edf5ff] focus:outline-none focus:border-[#35d9ff]"
-                          />
-                        </div>
-                      </div>
-
+                  {/* Preset chips */}
+                  <div className="flex items-center flex-wrap gap-1.5 pt-1">
+                    {(txType === 'income' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(cat => (
                       <button
-                        type="submit"
-                        className="w-full py-2.5 rounded-xl bg-gradient-to-r from-[#05f292] to-[#35d9ff] text-[#003641] font-bold text-xs font-mono shadow-md hover:brightness-105 active:scale-95 transition-all"
+                        key={cat}
+                        type="button"
+                        onClick={() => {
+                          triggerHaptic('light');
+                          setTxCategory(cat);
+                        }}
+                        className={`px-2 py-0.5 rounded-lg font-mono text-[10px] transition-all ${
+                          txCategory === cat
+                            ? 'bg-[#35d9ff] text-[#003641] font-bold'
+                            : 'bg-[#162338] text-[#91a2b8] hover:text-[#edf5ff]'
+                        }`}
                       >
-                        Record Payment
+                        {cat}
                       </button>
-                    </form>
+                    ))}
+                  </div>
+                </div>
 
-                    {/* Student Payment History */}
-                    <div className="space-y-2">
-                      <span className="font-mono text-[10px] text-[#91a2b8] uppercase tracking-wider block">
-                        Payment History ({studentPayments.length} Records)
-                      </span>
+                {/* Date and Method */}
+                <div className="grid grid-cols-2 gap-2 text-xs font-mono">
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[10px] text-[#91a2b8]">DATE</label>
+                    <input
+                      type="date"
+                      value={txDate}
+                      onChange={e => setTxDate(e.target.value)}
+                      className="bg-[#090f19] border border-[#202c3d] rounded-lg px-2.5 py-1.5 text-xs text-[#edf5ff] focus:outline-none focus:border-[#35d9ff]"
+                    />
+                  </div>
 
-                      {studentPayments.length === 0 ? (
-                        <p className="text-xs text-[#91a2b8] italic">No prior payments recorded for this student.</p>
-                      ) : (
-                        <div className="space-y-1.5 max-h-36 overflow-y-auto pr-1">
-                          {studentPayments.map(p => (
-                            <div
-                              key={p.id}
-                              className="p-2 rounded-lg bg-[#090f19] border border-[#202c3d]/30 flex items-center justify-between text-xs font-mono"
-                            >
-                              <div>
-                                <span className="text-[#edf5ff]">{p.paymentDate}</span>
-                                <span className="text-[#91a2b8] ml-2">({p.method || 'bKash'})</span>
-                                {p.notes && <span className="text-[#91a2b8] block text-[10px]">{p.notes}</span>}
-                              </div>
-                              <div className="flex items-center space-x-2">
-                                <span className="text-[#05f292] font-semibold">
-                                  ৳{p.amount.toLocaleString()}
-                                </span>
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    if (confirm(`Delete this payment of ৳${p.amount.toLocaleString()}?`)) {
-                                      deletePayment(p.id);
-                                    }
-                                  }}
-                                  className="text-[#91a2b8] hover:text-[#ff5370]"
-                                >
-                                  <span className="material-symbols-outlined text-[14px]">delete</span>
-                                </button>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </>
-                );
-              })()}
+                  <div className="flex flex-col space-y-1">
+                    <label className="text-[10px] text-[#91a2b8]">METHOD</label>
+                    <select
+                      value={txPaymentMethod}
+                      onChange={e => setTxPaymentMethod(e.target.value)}
+                      className="bg-[#090f19] border border-[#202c3d] rounded-lg px-2 py-1.5 text-xs text-[#edf5ff] focus:outline-none focus:border-[#35d9ff]"
+                    >
+                      <option value="bKash">bKash</option>
+                      <option value="Nagad">Nagad</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Rocket">Rocket</option>
+                      <option value="Card">Card</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Description or Notes */}
+                <div className="flex flex-col space-y-1">
+                  <label className="text-[10px] font-mono text-[#91a2b8]">NOTES / DESCRIPTION (OPTIONAL)</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. October tuition or grocery receipt"
+                    value={txDescription}
+                    onChange={e => setTxDescription(e.target.value)}
+                    className="w-full bg-[#090f19] border border-[#202c3d] rounded-xl px-3 py-2 text-xs text-[#edf5ff] focus:outline-none focus:border-[#35d9ff]"
+                  />
+                </div>
+
+                {/* Actions */}
+                <div className="flex items-center justify-end space-x-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setIsModalOpen(false)}
+                    className="px-3 py-1.5 text-xs font-mono text-[#91a2b8] hover:text-[#edf5ff]"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-4 py-2 rounded-xl bg-[#35d9ff] text-[#003641] font-mono text-xs font-bold shadow-md hover:bg-[#b5edff] active:scale-95 transition-all"
+                  >
+                    {editingTx ? 'Update Transaction' : 'Save Transaction'}
+                  </button>
+                </div>
+              </form>
             </motion.div>
           </div>
         )}

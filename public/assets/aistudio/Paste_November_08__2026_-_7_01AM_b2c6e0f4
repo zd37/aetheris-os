@@ -1,0 +1,817 @@
+# AETHERIS OS — COMPLETE FEATURE UPDATES AND UI IMPROVEMENTS
+
+## ROLE
+
+Act as a senior full-stack developer, UI/UX designer, and application architect.
+
+You are working on my existing Aetheris OS application. Your job is to inspect the current codebase and implement the requested upgrades directly into the existing project.
+
+This is an existing, working application. Do NOT create a new application, redesign the entire interface, or replace existing functionality unnecessarily.
+
+I want these changes implemented properly, with working functionality, persistent data, smooth animations, and a polished mobile experience.
+
+Most importantly, preserve all existing user data and the current visual identity of Aetheris OS.
+
+---
+
+# PART 1 — TASK MANAGEMENT UPGRADES
+
+## 1. Add the ability to edit existing tasks
+
+Currently, I can create and complete tasks, but I cannot properly edit a task after creating it.
+
+I want this functionality added.
+
+When I edit an existing task, I should be able to modify all relevant fields supported by the current task system, including:
+
+- Task title.
+- Description, if available.
+- Date.
+- Time or deadline, if available.
+- Category.
+- Priority, if available.
+- Other existing task properties.
+
+Requirements:
+
+1. Add a proper Edit Task interface.
+2. Reuse the existing Add Task form wherever possible.
+3. When the user selects Edit, open the form with the existing task information already filled in.
+4. The user should be able to modify the information and save the changes.
+5. Saving should update the original task rather than create a duplicate.
+6. Preserve the task's unique ID, creation date, completion history, and other relevant metadata.
+7. After saving, immediately update the task card.
+8. Changes must remain saved after closing and reopening the application.
+
+The editing experience should be simple, clean, and consistent with the existing Aetheris OS design.
+
+## 2. Replace swipe-to-delete with long-press task actions
+
+I do NOT want the current swipe-to-delete interaction.
+
+Instead, I want an interaction similar to the contextual menus used in modern mobile applications.
+
+When a user presses and holds an existing task card, open a compact action menu or bottom sheet.
+
+For example:
+
+The user presses and holds:
+
+"Review Physics Notes"
+
+A small contextual menu appears containing:
+
+- Edit
+- Mark as Completed / Mark as Incomplete
+- Carry Forward, where applicable
+- Delete
+
+The available actions should depend on the task's current state.
+
+### Interaction requirements
+
+- Detect a proper long press on mobile.
+- Use an appropriate duration, approximately 400–600 milliseconds.
+- Provide subtle visual feedback when the task is being pressed.
+- Open a compact contextual menu with smooth animation.
+- Keep the original task visible behind or near the menu.
+- Provide a clear close or cancel action.
+- Do not trigger long-press actions during ordinary scrolling.
+- Prevent conflicts with checkboxes and other task controls.
+- Support desktop users through right-click or a small three-dot action button.
+- Keep the menu visually consistent with the existing dark theme.
+
+### Delete behavior
+
+When the user chooses Delete:
+
+- Show a clear delete confirmation or a temporary Undo option.
+- Delete only the selected task.
+- Update the task list and counters immediately.
+- Preserve unrelated records.
+- Ensure the deletion is saved persistently.
+
+Do not delete a task simply because the user holds it.
+
+Remove the existing swipe-to-delete behavior from task cards so the interaction is consistent.
+
+---
+
+# PART 2 — HISTORICAL TASK COMPLETION
+
+## 3. Allow users to complete tasks from previous dates
+
+The application already has a calendar-based To-do history.
+
+Users can select an earlier date and view the tasks assigned to that date.
+
+However, currently, when viewing a previous day, the user cannot mark an unfinished task as completed.
+
+I want this fixed.
+
+### Example scenario
+
+Suppose:
+
+- October 6: User creates Task A.
+- October 6: Task A is not completed.
+- October 7: Task A is still unfinished.
+- October 8: User finally completes Task A.
+
+On October 8, the user should be able to:
+
+1. Open To-do.
+2. Tap the calendar/history icon.
+3. Select October 6.
+4. Tap View Day.
+5. Find Task A.
+6. Mark Task A as Completed.
+
+The task should then show as completed in October 6's history.
+
+### Important date-handling rules
+
+There are two different dates that must be handled correctly:
+
+**Assigned Date:** The date on which the task was originally planned.
+
+**Completion Date:** The date and time when the user actually completed it.
+
+For example:
+
+- Assigned date: October 6.
+- Completion date: October 8.
+- Status: Completed.
+
+Do NOT change the original assigned date when a historical task is completed.
+
+Do NOT move the task automatically into October 8.
+
+The task must remain associated with October 6, while its actual completion timestamp should record October 8.
+
+### Functional requirements
+
+- Historical task checkboxes must be interactive.
+- Users can mark historical tasks as completed.
+- Users can also change a completed task back to incomplete if necessary.
+- Completion changes must immediately update the historical summary.
+- Daily completion statistics must update correctly.
+- The calendar's activity indicators should reflect the updated records.
+- Changes must persist after reopening the application.
+- Do not allow a historical task action to accidentally modify a different task.
+
+The task's original assigned date and its actual completion timestamp must remain separate.
+
+---
+
+# PART 3 — SYSTEM NOTIFICATIONS
+
+## 4. Implement two daily motivational notifications
+
+I want Aetheris OS to send two notifications per day directly to the phone's notification bar.
+
+These must be actual operating-system notifications, NOT messages displayed only inside the application.
+
+The notifications should remind users to stay productive and complete their tasks.
+
+The tone should be funny, energetic, slightly teasing, and motivating.
+
+I do not want boring or overly formal notifications.
+
+### Notification schedule
+
+Use the user's local time.
+
+Set two sensible default notification times:
+
+- Morning notification: 9:00 AM.
+- Evening notification: 8:00 PM.
+
+Allow the user to change both times from notification settings.
+
+The user should also be able to:
+
+- Enable or disable morning notifications.
+- Enable or disable evening notifications.
+- Enable or disable all notifications.
+- Select a preferred notification style, if practical.
+
+Ask for notification permission through a clear, user-initiated action.
+
+Do not repeatedly request permission after the user denies it.
+
+### Example notification messages
+
+Morning:
+
+- "Hey hey hey! Your tasks aren't going to finish themselves. Get moving!"
+- "Good morning! Your to-do list is staring at you. Don't disappoint it."
+- "Rise and shine! Your future successful self is waiting."
+- "Enough scrolling. Go make some progress!"
+
+Evening:
+
+- "Hey! How many tasks did you defeat today?"
+- "The day is almost over. Don't let your to-do list win."
+- "One more task. Come on, you've got this!"
+- "Your bed is waiting, but so are those unfinished tasks!"
+
+Create a collection of varied motivational messages.
+
+Select messages randomly or in a rotating sequence so the user does not receive the same notification every day.
+
+The notification should feel natural and entertaining.
+
+### Actual notification requirements
+
+This feature must work even when:
+
+- The user is not currently viewing Aetheris OS.
+- The browser is in the background.
+- The Home Screen web app is closed, where the platform supports background notifications.
+
+Inspect the existing deployment architecture and implement a proper Web Push notification system using service workers and a suitable push backend/scheduler if required.
+
+Do NOT implement this using only JavaScript setTimeout or setInterval. Those are not reliable for scheduled notifications when the app is closed.
+
+Since Aetheris OS is currently deployed through Netlify, investigate the most appropriate compatible backend or scheduled-function approach.
+
+If additional backend configuration, VAPID keys, database storage, or environment variables are necessary, implement the required code and explain the exact setup steps.
+
+Do not expose private keys or secrets in frontend code.
+
+### Platform limitations
+
+The application must work as well as the browser and operating system allow.
+
+- Android Chrome should support proper Web Push notifications where supported.
+- On iPhone, support Web Push through the installed Home Screen web app on compatible iOS versions (iOS 16.4 or later).
+- Explain any limitations for iOS Safari, browser permissions, background delivery, or notification scheduling.
+- Do not falsely claim that notifications will work if the required push infrastructure has not been configured.
+
+### Notification sound
+
+I want notifications to have a pleasant, fun, recognizable sound.
+
+Investigate the sound capabilities of Web Push notifications on Android and iOS.
+
+If the platform allows notification sounds to be configured, implement a suitable sound option.
+
+If the operating system controls notification sounds and does not allow a custom sound from a PWA, explain that limitation clearly.
+
+Do not claim that an arbitrary MP3 file can be played as a custom background notification ringtone when the platform does not support it.
+
+Provide a sound preference or instructions for using the device's notification settings where appropriate.
+
+---
+
+# PART 4 — HAPTIC FEEDBACK AND VIBRATIONS
+
+## 5. Add subtle vibration feedback throughout Aetheris OS
+
+I want the application to feel more responsive when users interact with it.
+
+Add subtle haptic feedback to important interactions.
+
+Examples:
+
+- Tapping a primary action button.
+- Successfully saving a task.
+- Completing a task.
+- Changing a historical task's status.
+- Opening or confirming an important action.
+- Selecting a calendar date.
+- Saving a tuition record.
+- Saving a money-management transaction.
+- Confirming deletion.
+- Other meaningful interactions where haptics improve the experience.
+
+### Haptic behavior
+
+Use different feedback strengths where supported:
+
+- Light feedback for ordinary button interactions.
+- Medium feedback for successful actions.
+- Stronger feedback for important confirmations or destructive actions, where appropriate.
+
+Do not vibrate for every tiny interaction.
+
+Avoid excessive vibration that makes the app annoying.
+
+### Technical requirements
+
+First inspect whether the existing project uses Capacitor and whether a native Haptics plugin is already installed.
+
+If available, use the appropriate Capacitor Haptics implementation for native builds.
+
+For the currently deployed web application, use the Web Vibration API only where supported.
+
+Important limitations:
+
+- Android browsers may support vibration.
+- iOS Safari and iOS Home Screen web apps do not provide the same general vibration support as Android.
+- Do not promise vibration on platforms that do not support it.
+
+Use a reusable haptic-feedback utility so all components use consistent behavior.
+
+The app must continue functioning normally when vibration is unavailable.
+
+Also provide visual feedback as a fallback.
+
+---
+
+# PART 5 — STUDENT PROFILE AND TUITION UI CONSISTENCY
+
+## 6. Fix the inconsistent sizes of student detail screens
+
+Inside the Tuition section, when I open a student's profile or individual calendar and navigate through:
+
+- Attendance.
+- Fees.
+- Profile Info.
+
+The different screens currently appear to have inconsistent dimensions and layouts.
+
+I want all three screens to use the same overall size and layout structure.
+
+### Required behavior
+
+When a student is selected, the student detail interface should have a consistent presentation across all sections.
+
+The Attendance, Fees, and Profile Info views should share:
+
+- The same main container width.
+- The same screen or panel height.
+- The same top position.
+- The same bottom position.
+- The same header height.
+- The same bottom spacing.
+- The same overall content alignment.
+- Consistent margins and padding.
+- Consistent scrolling behavior.
+
+The content inside each section can be different, but the overall container must remain the same size.
+
+When switching between Attendance, Fees, and Profile Info, the screen should not jump, expand, shrink, or shift vertically.
+
+The transition should feel smooth.
+
+### Design requirements
+
+- Reuse one shared student-detail layout/container.
+- Keep the existing visual theme.
+- Maintain readable spacing.
+- Allow the inner content to scroll when necessary.
+- Respect iPhone and Android safe-area insets.
+- Avoid cutting off content at the bottom.
+- Make the same layout work across different screen sizes.
+
+Do not independently design three unrelated page containers.
+
+Use a common layout system so future changes remain consistent.
+
+## 7. Simplify the Fees label
+
+In the current student details interface, the label appears as something like:
+
+"Fees (Taka)"
+
+I do not want the extra currency wording in the label.
+
+Change it to simply:
+
+"Fees"
+
+Remove unnecessary currency text from the title or tab label.
+
+Keep the actual financial amounts and currency formatting correct wherever amounts are displayed.
+
+Do not change any fee calculations or existing payment records.
+
+---
+
+# PART 6 — MONEY MANAGEMENT SYSTEM
+
+## 8. Give users manual control over money management
+
+Currently, tuition-related income is automatically added to the Money Management section.
+
+I do not want this automatic behavior.
+
+I want Money Management to be a manually controlled financial record system.
+
+The user should decide when to add income or expenses.
+
+### Main requirements
+
+Add a clear primary action button to the Money Management interface.
+
+Suggested button:
+
+"+ Add Transaction"
+
+When clicked, open a clean transaction-entry form.
+
+The user should be able to choose:
+
+**Transaction Type:**
+- Income.
+- Expense.
+
+**Transaction details:**
+- Amount.
+- Category.
+- Date.
+- Description or note.
+- Optional payment method, if supported.
+
+For income, the user can record money received.
+
+For expenses, the user can record money spent.
+
+### Examples
+
+Income:
+- Tuition received.
+- Freelance payment.
+- Personal income.
+- Other income.
+
+Expense:
+- Food.
+- Transportation.
+- Shopping.
+- Education.
+- Other expenses.
+
+These are examples of possible categories, not mandatory fixed categories.
+
+Reuse existing categories if they already exist.
+
+### Manual transaction management
+
+The user must be able to:
+
+- Add income manually.
+- Add expenses manually.
+- Edit existing transactions.
+- Delete transactions.
+- View transaction history.
+- Filter transactions by date or category where appropriate.
+- View total income.
+- View total expenses.
+- View current balance.
+
+Use the following basic calculation:
+
+Balance = Total Income - Total Expenses.
+
+All displayed values must be calculated from the actual saved transactions.
+
+### Important: Stop automatic tuition-income additions
+
+Decouple Money Management from automatic tuition-income creation.
+
+When a user marks a tuition payment as received inside the Tuition section, it must NOT automatically create another income transaction in Money Management.
+
+The user should manually add that income through the Money Management section if they want it included in their financial records.
+
+Do not delete or modify historical transactions that already exist.
+
+Do not change the Tuition section's own fee and payment records.
+
+Tuition attendance, fees, and payment tracking must continue working independently.
+
+If the current application uses shared financial records, inspect the relationships and safely separate future manual transactions from existing tuition records.
+
+Do not double-count income.
+
+### Data safety
+
+- Preserve all existing income and expense records.
+- Preserve historical financial balances where possible.
+- Do not reset financial data.
+- Do not silently delete existing tuition-related payment history.
+- If a migration is required, implement it safely.
+- Clearly distinguish old automatically generated records from new manually created transactions if necessary.
+
+The Money Management section should feel like a proper personal finance tracker where the user has complete control.
+
+---
+
+# PART 7 — GEMINI SUGGESTION ANIMATION
+
+## 9. Improve the Gemini suggestion dismissal animation
+
+On the Aetheris OS Home page, there is an existing Gemini suggestion or assistant animation.
+
+Currently, when the user taps the cross (X) button to dismiss the Gemini suggestion, the dismissal animation does not look polished.
+
+I want this improved.
+
+### Desired behavior
+
+When the user taps the X button:
+
+- The Gemini suggestion should dismiss smoothly.
+- Use a polished fade-out and subtle scale or slide animation.
+- Avoid sudden disappearance.
+- Avoid awkward empty space.
+- Avoid flickering.
+- Avoid restarting or glitching the Gemini animation.
+- Ensure the close button responds immediately.
+- Keep the rest of the Home page stable.
+- The dismissal should feel intentional and premium.
+
+If the Gemini suggestion has an animated icon or glowing element, make sure its exit animation is coordinated with the card's dismissal.
+
+The card should not remain partially visible after closing.
+
+If the current design supports reopening the suggestion, preserve that behavior.
+
+If the dismissal state is saved, preserve the existing intended behavior rather than unexpectedly showing the suggestion again after every render.
+
+Use a short, smooth animation duration, approximately 200–350 milliseconds.
+
+Respect reduced-motion settings.
+
+Do not replace the existing Gemini design with a completely different widget.
+
+The objective is to improve the existing animation, not redesign Gemini.
+
+---
+
+# PART 8 — DESIGN AND DEVELOPMENT RULES
+
+## 10. Preserve the Aetheris OS visual identity
+
+The current application design must remain consistent.
+
+Preserve:
+
+- Dark navy background.
+- Existing cyan accent color.
+- Existing typography.
+- Rounded cards.
+- Existing icons wherever suitable.
+- Existing bottom navigation.
+- Existing page structure.
+- Existing Home, Tuition, Gym, To-do, Projects, and other sections.
+- Existing animations that already work properly.
+
+Do not make the interface unnecessarily complicated.
+
+Use consistent interaction patterns across the application.
+
+All new forms, menus, bottom sheets, dialogs, and buttons should match the existing design.
+
+Avoid:
+- Oversized buttons.
+- Unnecessary decorative cards.
+- Excessive glow effects.
+- Excessive animations.
+- Crowded layouts.
+- Inconsistent margins.
+- Unnecessary new navigation pages.
+
+The goal is a cleaner and more capable Aetheris OS, not a completely different application.
+
+---
+
+# PART 9 — DATA PRESERVATION AND BACKWARD COMPATIBILITY
+
+## 11. CRITICAL: Protect all existing user data
+
+Aetheris OS is already deployed through Netlify and users have been using it.
+
+Existing users may have important records, including:
+
+- Daily tasks.
+- Weekly and monthly tasks.
+- Historical task completion.
+- Student profiles.
+- Tuition attendance.
+- Tuition fees.
+- Payment history.
+- Prayer records.
+- Money-management records.
+- Notes.
+- Shopping lists.
+- Gym records.
+- Other personal information.
+
+Preserving this data is mandatory.
+
+Before changing anything, inspect the existing storage architecture.
+
+Determine whether records are stored using:
+
+- localStorage.
+- IndexedDB.
+- A remote database.
+- Backend APIs.
+- Context or state-management systems.
+- Other existing persistence methods.
+
+Do not assume all application data is stored in the same place.
+
+### Strict rules
+
+1. Never clear all localStorage.
+2. Never reset IndexedDB.
+3. Never replace existing records with sample data.
+4. Never delete old task records to implement editing.
+5. Never change existing storage keys destructively.
+6. Never reset tuition or student data.
+7. Never reset financial records.
+8. Never recreate the entire database unnecessarily.
+9. Preserve existing record identifiers.
+10. Use backward-compatible migrations if the data structure needs to change.
+
+If the new features require changes to existing data structures, implement a safe migration.
+
+The migration must:
+
+- Detect the old data format.
+- Preserve all existing information.
+- Transform only the required fields.
+- Avoid creating duplicate records.
+- Be safe if the application is reopened.
+- Avoid deleting the old data until the new data is successfully saved and validated.
+
+If an existing record cannot be safely migrated, preserve it and report the issue rather than deleting or guessing.
+
+Do not require users to clear their browser data, reinstall the application, or reset their phones.
+
+---
+
+# PART 10 — TESTING REQUIREMENTS
+
+## 12. Test every new feature
+
+Do not stop after building the UI.
+
+Test the actual functionality.
+
+### Task editing
+- Create a task.
+- Edit its title.
+- Edit its date.
+- Edit its other available fields.
+- Save the changes.
+- Reload the app.
+- Confirm the updated task remains.
+
+### Long-press menu
+- Hold a task card.
+- Confirm the contextual menu appears.
+- Select Edit.
+- Select Delete.
+- Confirm deletion is safe.
+- Confirm ordinary scrolling does not trigger the menu.
+- Verify desktop alternatives work.
+
+### Historical task completion
+- Create an unfinished task on an earlier date.
+- Open that date through calendar history.
+- Mark the task complete.
+- Verify its original assigned date remains unchanged.
+- Verify its actual completion date is recorded.
+- Reload and confirm the change persists.
+
+### Notifications
+- Verify permission handling.
+- Verify notification settings.
+- Verify both notification schedules.
+- Verify varied message content.
+- Verify delivery through the actual notification system where backend configuration is available.
+- Do not mark notification functionality as complete if only a local UI simulation has been implemented.
+
+### Haptics
+- Verify that supported devices provide appropriate feedback.
+- Verify unsupported devices do not produce errors.
+- Ensure the app remains usable without vibration.
+
+### Student details
+- Compare Attendance, Fees, and Profile Info.
+- Verify their main containers have identical dimensions.
+- Verify switching between them does not cause layout jumping.
+- Check small-screen responsiveness.
+
+### Money Management
+- Add income manually.
+- Add an expense manually.
+- Edit a transaction.
+- Delete a transaction.
+- Verify balance calculations.
+- Mark a tuition payment as received.
+- Confirm it does not automatically create a new Money Management income entry.
+- Confirm the original tuition payment record remains intact.
+
+### Gemini animation
+- Open the Home page.
+- Dismiss the Gemini suggestion.
+- Verify the animation is smooth.
+- Verify there is no flickering or awkward blank space.
+
+### General persistence
+- Reload the app.
+- Close and reopen it.
+- Confirm all existing and newly created records remain.
+- Confirm existing application sections continue working.
+
+---
+
+# PART 11 — IMPLEMENTATION WORKFLOW
+
+## 13. Work directly in my existing codebase
+
+Follow this workflow.
+
+### Phase 1: Inspect the project
+
+Before modifying code:
+
+- Inspect the existing application architecture.
+- Locate the relevant components.
+- Identify the task data model.
+- Identify the current storage mechanism.
+- Inspect the Tuition and Money Management relationship.
+- Inspect the student detail layout.
+- Inspect the Gemini suggestion component.
+- Check existing notification and service-worker support.
+- Check Capacitor plugins, if present.
+
+### Phase 2: Plan the implementation
+
+Identify:
+
+- Which files need changes.
+- Which existing components can be reused.
+- Whether a database migration is required.
+- Whether a backend service is needed for notifications.
+- Any platform limitations.
+- Potential risks to existing data.
+
+### Phase 3: Implement the changes
+
+Implement all requested features directly in the existing project.
+
+Do not provide only a plan or static mockup.
+
+Do not rewrite unrelated parts of the application.
+
+Use the existing project's framework, libraries, styling system, and coding conventions.
+
+### Phase 4: Build and test
+
+Run the appropriate existing commands, including:
+
+- Dependency checks if necessary.
+- Relevant tests.
+- Production build.
+
+Fix any errors introduced by your changes.
+
+Do not make unrelated dependency upgrades just for convenience.
+
+If dependency changes are necessary, explain why and keep them minimal.
+
+### Phase 5: Final report
+
+When implementation is complete, report:
+
+1. Features implemented.
+2. Files modified.
+3. Storage changes made.
+4. Whether a migration was required.
+5. How notification infrastructure works.
+6. Any required environment variables or backend setup.
+7. Which platforms support vibration and custom notification behavior.
+8. Tests performed and their actual results.
+9. Any remaining limitations.
+10. Exact instructions for deploying the updated build to Netlify.
+
+Do not claim that a feature is working if it has only been visually implemented.
+
+Do not claim that the live Netlify site has been updated unless deployment has actually succeeded.
+
+---
+
+# FINAL INSTRUCTIONS
+
+I want Aetheris OS to feel like a polished personal productivity operating system.
+
+The new features should make the application more useful, interactive, and enjoyable without making it complicated.
+
+Prioritize:
+
+- Reliable functionality.
+- Data safety.
+- Smooth interactions.
+- Consistent design.
+- Mobile responsiveness.
+- Proper notifications.
+- User control over personal records.
+
+**Most important: Inspect the existing application before changing anything. Preserve all existing user data and functionality. Make the smallest safe changes necessary to implement these upgrades properly.**

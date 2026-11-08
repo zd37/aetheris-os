@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import { AppProvider, useApp } from './context/AppContext';
 import { IOSStatusBar } from './components/layout/IOSStatusBar';
 import { BottomNavigation } from './components/layout/BottomNavigation';
@@ -13,9 +13,74 @@ import { GeminiModal } from './components/gemini/GeminiModal';
 import { ProfileSettingsModal } from './components/profile/ProfileSettingsModal';
 import { CyberLogo } from './components/common/CyberLogo';
 import { AnimatePresence, motion } from 'motion/react';
+import {
+  displaySystemNotification,
+  getMotivationalMessage,
+  getNotificationPermissionStatus,
+} from './services/notificationService';
 
 const MainAppContent: React.FC = () => {
-  const { activeTab, preferences, isStorageReady } = useApp();
+  const { activeTab, preferences, isStorageReady, notificationPreferences } = useApp();
+
+  // Register Service Worker and Daily Notification Scheduler
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    // 1. Register Service Worker for PWA Web Push
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker
+        .register('/sw.js')
+        .then(reg => {
+          console.log('[Aetheris PWA] Service Worker registered:', reg.scope);
+        })
+        .catch(err => {
+          console.warn('[Aetheris PWA] Service Worker registration failed:', err);
+        });
+    }
+
+    // 2. Scheduled Notification Heartbeat Checker (runs every 60s while active)
+    const checkSchedule = () => {
+      if (!notificationPreferences?.enabled) return;
+      if (getNotificationPermissionStatus() !== 'granted') return;
+
+      const now = new Date();
+      const currentHours = String(now.getHours()).padStart(2, '0');
+      const currentMinutes = String(now.getMinutes()).padStart(2, '0');
+      const currentTimeStr = `${currentHours}:${currentMinutes}`;
+      const todayDateStr = now.toISOString().split('T')[0];
+
+      // Check morning notification
+      if (
+        notificationPreferences.morningEnabled &&
+        currentTimeStr === notificationPreferences.morningTime
+      ) {
+        const lastSentMorning = localStorage.getItem('aetheris_last_morning_notification');
+        if (lastSentMorning !== todayDateStr) {
+          const msg = getMotivationalMessage('morning');
+          displaySystemNotification('Aetheris OS • Morning Kickstart ⚡', msg);
+          localStorage.setItem('aetheris_last_morning_notification', todayDateStr);
+        }
+      }
+
+      // Check evening notification
+      if (
+        notificationPreferences.eveningEnabled &&
+        currentTimeStr === notificationPreferences.eveningTime
+      ) {
+        const lastSentEvening = localStorage.getItem('aetheris_last_evening_notification');
+        if (lastSentEvening !== todayDateStr) {
+          const msg = getMotivationalMessage('evening');
+          displaySystemNotification('Aetheris OS • Evening Debrief 🌙', msg);
+          localStorage.setItem('aetheris_last_evening_notification', todayDateStr);
+        }
+      }
+    };
+
+    // Run check immediately and every 45 seconds
+    checkSchedule();
+    const interval = setInterval(checkSchedule, 45000);
+    return () => clearInterval(interval);
+  }, [notificationPreferences]);
 
   // Guard: Never display Onboarding screen until persistent storage has hydrated
   if (!isStorageReady) {
